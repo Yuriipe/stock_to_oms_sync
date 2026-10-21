@@ -33,10 +33,27 @@ Local automation tool designed to run directly on Windows to synchronize multipl
 - `src/main.ts`: Electron desktop host with system tray and Windows startup hooks.
 - `public/`: UI dashboard, XML visual mapper, and log viewer.
 
+## Building & Deploying the Binary
+
+To generate a **single-click Windows installer (`.exe`)** ready to distribute to target machines:
+
+```bash
+npm run deploy:binary
+```
+
+- Compiles TypeScript to `dist/`.
+- Packages the app using `electron-builder` with an NSIS single-click installer configuration (`oneClick: true`, desktop shortcut creation, auto-launch).
+- Outputs the ready `.exe` installer inside the `release/` directory.
+
+### Target Machine Installation
+1. Transfer or download the generated `.exe` installer onto the target Windows PC.
+2. Double-click the installer: it installs silently in the background, creates desktop/start shortcuts, and immediately launches the app.
+
 ## Tests
 
 Run the test suite with:
 ```bash
 npm test
 ```
-All 14 unit and integration tests are verified with deterministic in-memory SQLite and mocked network layers.
+All unit and integration tests are verified with deterministic in-memory SQLite and mocked network layers.
+

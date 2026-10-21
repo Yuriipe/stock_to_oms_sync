@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
 import fs from 'fs';
+import path from 'path';
 import { DatabaseManager } from '../storage/DatabaseManager';
 import { BaseLinkerClient } from '../baselinker/BaseLinkerClient';
 import { XmlParserService } from '../parser/XmlParserService';
@@ -26,8 +27,12 @@ export function createApiServer(
   const syncCoordinator = new SyncCoordinator(db, xmlParser, diffEngine);
   const updateService = new AppUpdateService(options?.repoDir || process.cwd());
 
-  // Serve static UI assets if built
-  app.use(express.static('public'));
+  // Serve static UI assets (support both dev and packaged electron ASAR/resources)
+  const publicDir = fs.existsSync(path.join(__dirname, '../../public'))
+    ? path.join(__dirname, '../../public')
+    : path.join(__dirname, '../public');
+  const finalPublicDir = fs.existsSync(publicDir) ? publicDir : path.join(process.cwd(), 'public');
+  app.use(express.static(finalPublicDir));
 
   // Get App Update Status
   app.get('/api/updates/status', async (req, res) => {

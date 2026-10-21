@@ -2,14 +2,49 @@
   "name": "boltline-base-xml",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/main.js",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc",
     "start": "tsc && electron ./dist/main.js",
     "dev": "electron -r tsx/cjs ./src/main.ts",
-    "preview": "npx tsx ./src/web-server.ts"
+    "preview": "npx tsx ./src/web-server.ts",
+    "dist": "npm run build && electron-builder --win",
+    "dist:dir": "npm run build && electron-builder --win --dir",
+    "deploy:binary": "node scripts/build-binary.js"
+  },
+  "build": {
+    "appId": "com.boltline.base-xml-sync",
+    "productName": "Boltline Base XML Sync",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Boltline Base XML Sync"
+    }
   },
   "keywords": [],
   "author": "",
@@ -21,6 +56,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "electron": "^44.9.3",
+    "electron-builder": "^26.15.3",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
