@@ -16,16 +16,30 @@ export class DatabaseManager {
         baseLinkerToken TEXT NOT NULL DEFAULT '',
         autoStartOnBoot INTEGER NOT NULL DEFAULT 0,
         minimizeToTray INTEGER NOT NULL DEFAULT 1,
-        serverPort INTEGER NOT NULL DEFAULT 3890
+        serverPort INTEGER NOT NULL DEFAULT 3890,
+        githubToken TEXT DEFAULT '',
+        updateRepo TEXT DEFAULT 'https://github.com/Yuriipe/stock_to_oms_sync.git'
       );
     `);
+
+    // Add columns if table already existed without them
+    try {
+      this.db.exec(`ALTER TABLE app_settings ADD COLUMN githubToken TEXT DEFAULT ''`);
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec(`ALTER TABLE app_settings ADD COLUMN updateRepo TEXT DEFAULT 'https://github.com/Yuriipe/stock_to_oms_sync.git'`);
+    } catch {
+      // Column may already exist
+    }
 
     // Ensure default settings row exists
     const settings = this.db.prepare('SELECT id FROM app_settings WHERE id = 1').get();
     if (!settings) {
       this.db.prepare(`
-        INSERT INTO app_settings (id, baseLinkerToken, autoStartOnBoot, minimizeToTray, serverPort)
-        VALUES (1, '', 0, 1, 3890)
+        INSERT INTO app_settings (id, baseLinkerToken, autoStartOnBoot, minimizeToTray, serverPort, githubToken, updateRepo)
+        VALUES (1, '', 0, 1, 3890, '', 'https://github.com/Yuriipe/stock_to_oms_sync.git')
       `).run();
     }
 
@@ -79,20 +93,24 @@ export class DatabaseManager {
 
   public getSettings(): AppSettings {
     const row = this.db.prepare(`
-      SELECT baseLinkerToken, autoStartOnBoot, minimizeToTray, serverPort
+      SELECT baseLinkerToken, autoStartOnBoot, minimizeToTray, serverPort, githubToken, updateRepo
       FROM app_settings WHERE id = 1
     `).get() as {
       baseLinkerToken: string;
       autoStartOnBoot: number;
       minimizeToTray: number;
       serverPort: number;
+      githubToken?: string;
+      updateRepo?: string;
     };
 
     return {
       baseLinkerToken: row.baseLinkerToken,
       autoStartOnBoot: Boolean(row.autoStartOnBoot),
       minimizeToTray: Boolean(row.minimizeToTray),
-      serverPort: row.serverPort
+      serverPort: row.serverPort,
+      githubToken: row.githubToken || '',
+      updateRepo: row.updateRepo || 'https://github.com/Yuriipe/stock_to_oms_sync.git'
     };
   }
 
@@ -102,13 +120,15 @@ export class DatabaseManager {
 
     this.db.prepare(`
       UPDATE app_settings
-      SET baseLinkerToken = ?, autoStartOnBoot = ?, minimizeToTray = ?, serverPort = ?
+      SET baseLinkerToken = ?, autoStartOnBoot = ?, minimizeToTray = ?, serverPort = ?, githubToken = ?, updateRepo = ?
       WHERE id = 1
     `).run(
       updated.baseLinkerToken,
       updated.autoStartOnBoot ? 1 : 0,
       updated.minimizeToTray ? 1 : 0,
-      updated.serverPort
+      updated.serverPort,
+      updated.githubToken || '',
+      updated.updateRepo || ''
     );
   }
 

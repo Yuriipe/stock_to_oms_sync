@@ -266,6 +266,18 @@
               <ul class="commit-list" id="incoming-commits-list"></ul>
             </div>
 
+            <div class="form-row" style="margin-top: 16px;">
+              <div class="form-group col-6">
+                <label>GitHub Personal Access Token (PAT)</label>
+                <input type="password" id="setting-github-token" class="input-field" placeholder="ghp_... (For private repositories)">
+                <small style="color: var(--text-muted); font-size: 11px;">Needed if the repository is private on a target machine without saved git credentials.</small>
+              </div>
+              <div class="form-group col-6">
+                <label>Remote Git Repository URL</label>
+                <input type="text" id="setting-github-repo" class="input-field" placeholder="https://github.com/Yuriipe/stock_to_oms_sync.git">
+              </div>
+            </div>
+
             <div class="update-card-actions" style="margin-top: 16px;">
               <button id="btn-settings-check-update" class="btn btn-secondary">
                 <span class="icon">🔍</span> Check for Updates

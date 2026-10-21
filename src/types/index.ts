@@ -31,6 +31,8 @@ export interface AppSettings {
   autoStartOnBoot: boolean;
   minimizeToTray: boolean;
   serverPort: number;
+  githubToken?: string;
+  updateRepo?: string;
 }
 
 export interface ProductDelta {

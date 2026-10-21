@@ -32,7 +32,11 @@ export function createApiServer(
   // Get App Update Status
   app.get('/api/updates/status', async (req, res) => {
     try {
-      const status = await updateService.checkForUpdates();
+      const settings = db.getSettings();
+      const status = await updateService.checkForUpdates({
+        token: settings.githubToken,
+        repoUrl: settings.updateRepo
+      });
       res.json(status);
     } catch (e: unknown) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
@@ -42,7 +46,11 @@ export function createApiServer(
   // Trigger Apply Update (git pull + build)
   app.post('/api/updates/apply', async (req, res) => {
     try {
-      const result = await updateService.applyUpdate();
+      const settings = db.getSettings();
+      const result = await updateService.applyUpdate({
+        token: settings.githubToken,
+        repoUrl: settings.updateRepo
+      });
       res.json(result);
     } catch (e: unknown) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });

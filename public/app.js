@@ -38,6 +38,12 @@ async function init() {
     document.getElementById('setting-token').value = state.settings.baseLinkerToken || '';
     document.getElementById('setting-autostart').checked = state.settings.autoStartOnBoot;
     document.getElementById('setting-tray').checked = state.settings.minimizeToTray;
+    if (document.getElementById('setting-github-token')) {
+      document.getElementById('setting-github-token').value = state.settings.githubToken || '';
+    }
+    if (document.getElementById('setting-github-repo')) {
+      document.getElementById('setting-github-repo').value = state.settings.updateRepo || 'https://github.com/Yuriipe/stock_to_oms_sync.git';
+    }
 
     if (state.settings.baseLinkerToken) {
       loadHierarchy();
@@ -81,10 +87,13 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
     const updated = {
       baseLinkerToken: document.getElementById('setting-token').value.trim(),
       autoStartOnBoot: document.getElementById('setting-autostart').checked,
-      minimizeToTray: document.getElementById('setting-tray').checked
+      minimizeToTray: document.getElementById('setting-tray').checked,
+      githubToken: document.getElementById('setting-github-token')?.value.trim() || '',
+      updateRepo: document.getElementById('setting-github-repo')?.value.trim() || ''
     };
     await api('/settings', { method: 'POST', body: JSON.stringify(updated) });
     alert('Settings saved successfully!');
+    checkAppUpdates(false);
   } catch (e) {
     alert('Error saving settings: ' + e.message);
   }
