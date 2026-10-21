@@ -1,24 +1,37 @@
-name: Build and Release Windows Installer
+name: Build, Version and Release Windows Installer
 
 on:
   push:
-    tags:
-      - 'v*'
     branches:
       - main
-      - master
+    tags-ignore:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump override (leave empty to autodetect from commits)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
 
 jobs:
-  build-windows:
+  version-and-release:
     runs-on: windows-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -29,6 +42,86 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Determine Next Semantic Version
+        id: semver
+        shell: bash
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current package.json version: $CURRENT_VERSION"
+
+          # Get latest git tag if exists, otherwise fallback to v$CURRENT_VERSION
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Latest git tag found: $LATEST_TAG"
+
+          if [ -n "$LATEST_TAG" ]; then
+            BASE_VERSION="${LATEST_TAG#v}"
+          else
+            BASE_VERSION="$CURRENT_VERSION"
+          fi
+
+          # Parse major.minor.patch
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+          MAJOR=${MAJOR:-1}
+          MINOR=${MINOR:-0}
+          PATCH=${PATCH:-0}
+
+          OVERRIDE="${{ github.event.inputs.bump }}"
+          if [ -n "$OVERRIDE" ]; then
+            BUMP="$OVERRIDE"
+          else
+            # Inspect commits since latest tag, or last 10 commits
+            if [ -n "$LATEST_TAG" ]; then
+              COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline)
+            else
+              COMMITS=$(git log -n 10 --oneline)
+            fi
+
+            echo "Analyzing commits for version bump:"
+            echo "$COMMITS"
+
+            if echo "$COMMITS" | grep -Ei "BREAKING CHANGE|!: "; then
+              BUMP="major"
+            elif echo "$COMMITS" | grep -Ei "^[a-f0-9]+ (feat|feature)(\(.*\))?:"; then
+              BUMP="minor"
+            else
+              BUMP="patch"
+            fi
+          fi
+
+          echo "Determined bump type: $BUMP"
+
+          case "$BUMP" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEXT_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          NEXT_TAG="v${NEXT_VERSION}"
+
+          echo "Next version: $NEXT_VERSION"
+          echo "Next tag: $NEXT_TAG"
+
+          # Update package.json without creating default git tag yet
+          npm version "$NEXT_VERSION" --no-git-tag-version
+
+          # Output for downstream steps
+          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$NEXT_TAG" >> $GITHUB_OUTPUT
+
       - name: Build TypeScript sources
         run: npm run build
 
@@ -37,17 +130,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win
 
+      - name: Commit version bump and create git tag
+        shell: bash
+        run: |
+          git add package.json package-lock.json
+          git commit -m "chore(release): bump version to ${{ steps.semver.outputs.tag }} [skip ci]" || echo "No files modified"
+          git tag -a "${{ steps.semver.outputs.tag }}" -m "Release ${{ steps.semver.outputs.tag }}"
+          git push origin main --follow-tags
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Boltline-Base-XML-Installer
+          name: Boltline-Base-XML-Installer-${{ steps.semver.outputs.tag }}
           path: release/*.exe
           if-no-files-found: error
 
-      - name: Publish GitHub Release (on tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.semver.outputs.tag }}
+          name: Release ${{ steps.semver.outputs.tag }}
+          generate_release_notes: true
           files: release/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
