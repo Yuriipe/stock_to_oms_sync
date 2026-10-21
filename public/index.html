@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boltline Base XML Sync</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">⚡</div>
+        <div class="brand-text">
+          <h2>Boltline XML</h2>
+          <span>BaseLinker Automator</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="dashboard">
+          <span class="icon">📊</span> Profiles & Sync
+        </button>
+        <button class="nav-item" data-tab="mapper">
+          <span class="icon">🧩</span> XML Field Mapper
+        </button>
+        <button class="nav-item" data-tab="settings">
+          <span class="icon">⚙️</span> BaseLinker & System
+        </button>
+        <button class="nav-item" data-tab="logs">
+          <span class="icon">📋</span> Activity Logs
+        </button>
+      </nav>
+
+      <div class="system-status-box">
+        <div class="status-indicator">
+          <span class="status-dot"></span>
+          <span id="service-status">Engine Running</span>
+        </div>
+        <div class="tray-tip">Minimizes to Windows Tray</div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <h1 id="page-title">Feed Profiles & Sync Status</h1>
+        <div class="topbar-actions">
+          <button id="btn-sync-all" class="btn btn-primary">
+            <span class="icon">⚡</span> Sync All Active Feeds
+          </button>
+          <button id="btn-add-profile" class="btn btn-secondary">
+            + Add Feed Profile
+          </button>
+        </div>
+      </header>
+
+      <!-- TAB: DASHBOARD / PROFILES -->
+      <section id="tab-dashboard" class="tab-pane active">
+        <div class="profiles-grid" id="profiles-list">
+          <!-- Dynamically populated profiles -->
+        </div>
+      </section>
+
+      <!-- TAB: XML FIELD MAPPER -->
+      <section id="tab-mapper" class="tab-pane">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Visual XML Field Mapper & Live Inspector</h3>
+            <p>Paste a snippet of XML or provide a URL/file path to auto-detect tag names and map them to BaseLinker fields.</p>
+          </div>
+          <div class="mapper-grid">
+            <div class="mapper-left">
+              <div class="form-group">
+                <label>Select Profile to Edit Mapping</label>
+                <select id="mapper-profile-select" class="input-field"></select>
+              </div>
+
+              <div class="form-group">
+                <label>Sample XML Source</label>
+                <textarea id="sample-xml-input" class="code-area" placeholder="Paste sample XML here (or leave empty to fetch from profile source)..."></textarea>
+              </div>
+
+              <button id="btn-inspect-xml" class="btn btn-secondary">
+                🔍 Auto-Detect XML Tags
+              </button>
+
+              <div id="detected-tags-box" class="tag-badges-container" style="display:none; margin-top: 15px;">
+                <label>Detected Item Tags:</label>
+                <div id="detected-tags-list" class="badge-row"></div>
+              </div>
+            </div>
+
+            <div class="mapper-right">
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label>Item Repeat Tag (e.g. product, item, o)</label>
+                  <input type="text" id="map-item-tag" class="input-field" placeholder="product">
+                </div>
+                <div class="form-group col-6">
+                  <label>Match Identifier By</label>
+                  <select id="map-id-field" class="input-field">
+                    <option value="sku">SKU (Default)</option>
+                    <option value="ean">EAN / Barcode</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label>SKU Path / Tag</label>
+                  <input type="text" id="map-sku-path" class="input-field" placeholder="sku or @_code">
+                </div>
+                <div class="form-group col-6">
+                  <label>EAN Path / Tag</label>
+                  <input type="text" id="map-ean-path" class="input-field" placeholder="ean or barcode">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label>Price Path / Tag</label>
+                  <input type="text" id="map-price-path" class="input-field" placeholder="price or price_netto">
+                </div>
+                <div class="form-group col-6">
+                  <label>Stock / Qty Path / Tag</label>
+                  <input type="text" id="map-stock-path" class="input-field" placeholder="qty or stock">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Product Name Tag (Optional)</label>
+                <input type="text" id="map-name-path" class="input-field" placeholder="name or title">
+              </div>
+
+              <div class="form-actions">
+                <button id="btn-preview-mapping" class="btn btn-secondary">Preview Parsed Items</button>
+                <button id="btn-save-mapping" class="btn btn-primary">Save Mapping to Profile</button>
+              </div>
+
+              <div id="preview-results-box" class="preview-box" style="display:none;">
+                <h4>Mapping Preview Results (<span id="preview-count">0</span> items detected)</h4>
+                <div class="table-scroll">
+                  <table class="data-table" id="preview-table">
+                    <thead>
+                      <tr>
+                        <th>Identifier</th>
+                        <th>SKU</th>
+                        <th>EAN</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Name</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: BASELINKER & SYSTEM SETTINGS -->
+      <section id="tab-settings" class="tab-pane">
+        <div class="panel max-w-700">
+          <div class="panel-header">
+            <h3>BaseLinker API Connection</h3>
+            <p>Connect your local app with your BaseLinker token to discover inventories, warehouses, and price groups dynamically.</p>
+          </div>
+
+          <div class="form-group">
+            <label>BaseLinker API Token</label>
+            <input type="password" id="setting-token" class="input-field" placeholder="Paste BaseLinker API Token">
+          </div>
+
+          <button id="btn-test-bl" class="btn btn-secondary">
+            Test Connection & Fetch Hierarchy
+          </button>
+
+          <div id="bl-hierarchy-info" class="hierarchy-box" style="display:none; margin-top: 20px;">
+            <h4>BaseLinker Discovery Summary</h4>
+            <div id="hierarchy-summary-badges"></div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="panel-header">
+            <h3>Windows System & Autostart</h3>
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <strong>Launch on Windows Boot (Autostart)</strong>
+              <p>Automatically start the sync engine in background when you log into Windows.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-autostart">
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <strong>Minimize to Windows System Tray</strong>
+              <p>Closing the window keeps the application syncing silently in the taskbar tray.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="setting-tray" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="form-actions" style="margin-top: 30px;">
+            <button id="btn-save-settings" class="btn btn-primary">Save Global Settings</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: ACTIVITY LOGS -->
+      <section id="tab-logs" class="tab-pane">
+        <div class="panel">
+          <div class="panel-header flex-between">
+            <div>
+              <h3>Execution & Sync Logs</h3>
+              <p>History of automated background runs and manual sync dispatches.</p>
+            </div>
+            <button id="btn-refresh-logs" class="btn btn-secondary">Refresh</button>
+          </div>
+
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Profile</th>
+                  <th>Status</th>
+                  <th>Processed</th>
+                  <th>Prices Updated</th>
+                  <th>Stocks Updated</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="logs-tbody">
+                <!-- Log rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- PROFILE MODAL (CREATE / EDIT) -->
+  <div id="profile-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-title">Feed Profile</h3>
+        <button id="btn-close-modal" class="btn-close">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <input type="hidden" id="prof-id">
+
+        <div class="form-group">
+          <label>Profile Name</label>
+          <input type="text" id="prof-name" class="input-field" placeholder="e.g. Supplier X - Main Catalogue">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label>Source Type</label>
+            <select id="prof-source-type" class="input-field">
+              <option value="url">Remote URL (HTTP/HTTPS)</option>
+              <option value="file">Local XML File (.xml)</option>
+            </select>
+          </div>
+          <div class="form-group col-6">
+            <label>Sync Interval (Minutes)</label>
+            <input type="number" id="prof-interval" class="input-field" value="30" min="5">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label id="prof-source-label">XML Feed URL</label>
+          <input type="text" id="prof-source-path" class="input-field" placeholder="https://example.com/feed.xml">
+        </div>
+
+        <div class="form-group" id="prof-auth-group">
+          <label>Authorization Header (Optional)</label>
+          <input type="text" id="prof-auth-header" class="input-field" placeholder="Bearer xyz or Basic abc">
+        </div>
+
+        <div class="divider"></div>
+        <h4>BaseLinker Target Mapping</h4>
+
+        <div class="form-group">
+          <label>Target Inventory</label>
+          <select id="prof-inventory" class="input-field">
+            <option value="">Load inventories from Settings first...</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label>Target Warehouse</label>
+            <select id="prof-warehouse" class="input-field">
+              <option value="">Select Warehouse...</option>
+            </select>
+          </div>
+          <div class="form-group col-6">
+            <label>Target Price Group</label>
+            <select id="prof-pricegroup" class="input-field">
+              <option value="">Select Price Group...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Match Products In BaseLinker By</label>
+          <select id="prof-id-field" class="input-field">
+            <option value="sku">SKU</option>
+            <option value="ean">EAN / Barcode</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="btn-cancel-profile" class="btn btn-secondary">Cancel</button>
+        <button id="btn-save-profile" class="btn btn-primary">Save Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
