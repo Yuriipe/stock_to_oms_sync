@@ -58,10 +58,31 @@ export class DatabaseManager {
         identifierField TEXT NOT NULL DEFAULT 'sku',
         mappingJson TEXT NOT NULL,
         syncIntervalMinutes INTEGER NOT NULL DEFAULT 30,
+        fixedStock INTEGER DEFAULT NULL,
         lastSyncAt TEXT,
         lastSyncStatus TEXT,
         lastSyncMessage TEXT
       );
+    `);
+
+    try {
+      this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN fixedStock INTEGER DEFAULT NULL`);
+    } catch {
+      // Column may already exist
+    }
+
+    // BaseLinker Products Table (Persistent cache of BaseLinker items per inventory)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS baselinker_products (
+        inventoryId INTEGER NOT NULL,
+        productId INTEGER NOT NULL,
+        sku TEXT,
+        ean TEXT,
+        updatedAt TEXT NOT NULL,
+        PRIMARY KEY (inventoryId, productId)
+      );
+      CREATE INDEX IF NOT EXISTS idx_bl_sku ON baselinker_products(inventoryId, sku);
+      CREATE INDEX IF NOT EXISTS idx_bl_ean ON baselinker_products(inventoryId, ean);
     `);
 
     // Sync Cache Table (Stores last known state per profile and identifier)
@@ -146,6 +167,7 @@ export class DatabaseManager {
       identifierField: 'sku' | 'ean';
       mappingJson: string;
       syncIntervalMinutes: number;
+      fixedStock?: number | null;
       lastSyncAt?: string;
       lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';
       lastSyncMessage?: string;
@@ -164,6 +186,7 @@ export class DatabaseManager {
       identifierField: r.identifierField,
       mapping: JSON.parse(r.mappingJson),
       syncIntervalMinutes: r.syncIntervalMinutes,
+      fixedStock: r.fixedStock !== null && r.fixedStock !== undefined ? Number(r.fixedStock) : undefined,
       lastSyncAt: r.lastSyncAt || undefined,
       lastSyncStatus: r.lastSyncStatus || undefined,
       lastSyncMessage: r.lastSyncMessage || undefined
@@ -184,6 +207,7 @@ export class DatabaseManager {
       identifierField: 'sku' | 'ean';
       mappingJson: string;
       syncIntervalMinutes: number;
+      fixedStock?: number | null;
       lastSyncAt?: string;
       lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';
       lastSyncMessage?: string;
@@ -204,6 +228,7 @@ export class DatabaseManager {
       identifierField: row.identifierField,
       mapping: JSON.parse(row.mappingJson),
       syncIntervalMinutes: row.syncIntervalMinutes,
+      fixedStock: row.fixedStock !== null && row.fixedStock !== undefined ? Number(row.fixedStock) : undefined,
       lastSyncAt: row.lastSyncAt || undefined,
       lastSyncStatus: row.lastSyncStatus || undefined,
       lastSyncMessage: row.lastSyncMessage || undefined
@@ -215,9 +240,9 @@ export class DatabaseManager {
       INSERT INTO feed_profiles (
         id, name, enabled, sourceType, sourcePath, authHeader,
         targetInventoryId, targetWarehouseId, targetPriceGroupId,
-        identifierField, mappingJson, syncIntervalMinutes,
+        identifierField, mappingJson, syncIntervalMinutes, fixedStock,
         lastSyncAt, lastSyncStatus, lastSyncMessage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         enabled = excluded.enabled,
@@ -230,6 +255,7 @@ export class DatabaseManager {
         identifierField = excluded.identifierField,
         mappingJson = excluded.mappingJson,
         syncIntervalMinutes = excluded.syncIntervalMinutes,
+        fixedStock = excluded.fixedStock,
         lastSyncAt = excluded.lastSyncAt,
         lastSyncStatus = excluded.lastSyncStatus,
         lastSyncMessage = excluded.lastSyncMessage
@@ -248,6 +274,7 @@ export class DatabaseManager {
       profile.identifierField,
       JSON.stringify(profile.mapping),
       profile.syncIntervalMinutes,
+      profile.fixedStock !== undefined && profile.fixedStock !== null ? Number(profile.fixedStock) : null,
       profile.lastSyncAt || null,
       profile.lastSyncStatus || null,
       profile.lastSyncMessage || null
@@ -310,5 +337,53 @@ export class DatabaseManager {
 
   public close(): void {
     this.db.close();
+  }
+
+  // BaseLinker Products Cache Methods
+  public getBaseProductsCount(inventoryId: number): number {
+    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM baselinker_products WHERE inventoryId = ?').get(inventoryId) as { cnt: number } | undefined;
+    return row?.cnt || 0;
+  }
+
+  public getBaseProductsMap(inventoryId: number, identifierField: 'sku' | 'ean'): Map<string, number> {
+    const field = identifierField === 'sku' ? 'sku' : 'ean';
+    const rows = this.db.prepare(`
+      SELECT productId, ${field} as identifier
+      FROM baselinker_products
+      WHERE inventoryId = ? AND ${field} IS NOT NULL AND ${field} != ''
+    `).all(inventoryId) as Array<{ productId: number; identifier: string }>;
+
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      if (r.identifier) {
+        map.set(r.identifier.trim(), r.productId);
+      }
+    }
+    return map;
+  }
+
+  public upsertBaseProducts(inventoryId: number, products: Array<{ productId: number; sku?: string; ean?: string }>): void {
+    if (products.length === 0) return;
+    const now = new Date().toISOString();
+    const insert = this.db.prepare(`
+      INSERT INTO baselinker_products (inventoryId, productId, sku, ean, updatedAt)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(inventoryId, productId) DO UPDATE SET
+        sku = excluded.sku,
+        ean = excluded.ean,
+        updatedAt = excluded.updatedAt
+    `);
+
+    const insertMany = this.db.transaction((items: Array<{ productId: number; sku?: string; ean?: string }>) => {
+      for (const item of items) {
+        insert.run(inventoryId, item.productId, item.sku || null, item.ean || null, now);
+      }
+    });
+
+    insertMany(products);
+  }
+
+  public saveSingleBaseProduct(inventoryId: number, productId: number, sku?: string, ean?: string): void {
+    this.upsertBaseProducts(inventoryId, [{ productId, sku, ean }]);
   }
 }

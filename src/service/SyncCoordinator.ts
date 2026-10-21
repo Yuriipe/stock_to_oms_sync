@@ -80,38 +80,88 @@ export class SyncCoordinator {
         };
       }
 
-      // 3. Match against BaseLinker product IDs
-      // Fetch products in inventory to map SKU/EAN to BaseLinker product_id
-      const blProductMap = new Map<string, number>();
-      let page = 1;
-      let hasMore = true;
-
-      while (hasMore) {
-        const listRes = await client.getInventoryProductsList(profile.targetInventoryId, page);
-        const products = Object.values(listRes.products || {});
-        if (products.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        for (const p of products) {
-          const key = profile.identifierField === 'sku' ? p.sku : p.ean;
-          if (key) {
-            blProductMap.set(key.trim(), p.id);
-          }
-        }
-
-        if (products.length < 1000) {
-          hasMore = false;
-        } else {
-          page++;
+      // Apply fixed stock override if configured for this profile
+      if (profile.fixedStock !== undefined && profile.fixedStock !== null) {
+        const fixedVal = Number(profile.fixedStock);
+        for (const item of items) {
+          item.stock = fixedVal;
         }
       }
 
-      // 4. Calculate Deltas
+      // 3. Match against BaseLinker product IDs using local DB cache
+      // Check if we already have cached products for targetInventoryId
+      let blProductMap = this.db.getBaseProductsMap(profile.targetInventoryId, profile.identifierField);
+
+      // If local DB has no products for this inventory, pull all pages from BaseLinker with pagination
+      if (blProductMap.size === 0) {
+        let page = 1;
+        let hasMore = true;
+        const productsToCache: Array<{ productId: number; sku?: string; ean?: string }> = [];
+
+        while (hasMore) {
+          const listRes = await client.getInventoryProductsList(profile.targetInventoryId, page);
+          const products = Object.values(listRes.products || {});
+          if (products.length === 0) {
+            hasMore = false;
+            break;
+          }
+
+          for (const p of products) {
+            productsToCache.push({
+              productId: p.id,
+              sku: p.sku ? p.sku.trim() : undefined,
+              ean: p.ean ? p.ean.trim() : undefined
+            });
+          }
+
+          if (products.length < 1000) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        }
+
+        if (productsToCache.length > 0) {
+          this.db.upsertBaseProducts(profile.targetInventoryId, productsToCache);
+          blProductMap = this.db.getBaseProductsMap(profile.targetInventoryId, profile.identifierField);
+        }
+      }
+
+      // 4. Auto-create products in BaseLinker if missing and stock > 0
+      let createdCount = 0;
+      for (const item of items) {
+        const existingBlId = blProductMap.get(item.identifier);
+        if (!existingBlId && item.stock > 0) {
+          try {
+            const newBlId = await client.addInventoryProduct({
+              inventory_id: profile.targetInventoryId,
+              sku: item.sku || (profile.identifierField === 'sku' ? item.identifier : undefined),
+              ean: item.ean || (profile.identifierField === 'ean' ? item.identifier : undefined),
+              prices: { [profile.targetPriceGroupId]: item.price },
+              stock: { [profile.targetWarehouseId]: item.stock },
+              name: item.name || item.sku || item.identifier
+            });
+
+            if (newBlId) {
+              blProductMap.set(item.identifier, newBlId);
+              this.db.saveSingleBaseProduct(
+                profile.targetInventoryId,
+                newBlId,
+                item.sku || (profile.identifierField === 'sku' ? item.identifier : undefined),
+                item.ean || (profile.identifierField === 'ean' ? item.identifier : undefined)
+              );
+              createdCount++;
+            }
+          } catch (createErr) {
+            console.error(`Failed to create product ${item.identifier} in BaseLinker:`, createErr);
+          }
+        }
+      }
+
+      // 5. Calculate Deltas
       const deltas = this.diffEngine.calculateDeltas(profile.id, items);
 
-      // 5. Build BaseLinker update payloads
+      // 6. Build BaseLinker update payloads
       const pricesToUpdate: Record<number, number> = {};
       const stocksToUpdate: Record<number, number> = {};
 
@@ -127,7 +177,7 @@ export class SyncCoordinator {
         }
       }
 
-      // 6. Push updates to BaseLinker
+      // 7. Push updates to BaseLinker
       let pricesUpdatedCount = 0;
       let stocksUpdatedCount = 0;
 
@@ -147,10 +197,13 @@ export class SyncCoordinator {
         );
       }
 
-      // 7. Commit deltas to local cache
+      // 8. Commit deltas to local cache
       this.diffEngine.commitDeltas(profile.id, deltas);
 
-      const successMsg = `Synced ${items.length} items. Updated ${pricesUpdatedCount} prices, ${stocksUpdatedCount} stock levels.`;
+      let successMsg = `Synced ${items.length} items. Updated ${pricesUpdatedCount} prices, ${stocksUpdatedCount} stock levels.`;
+      if (createdCount > 0) {
+        successMsg += ` Created ${createdCount} new items in BaseLinker.`;
+      }
       this.logAndSaveStatus(profile, 'success', items.length, pricesUpdatedCount, stocksUpdatedCount, successMsg);
 
       return {

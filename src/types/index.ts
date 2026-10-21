@@ -21,6 +21,7 @@ export interface FeedProfile {
   identifierField: 'sku' | 'ean';
   mapping: XmlFieldMapping;
   syncIntervalMinutes: number;
+  fixedStock?: number | null;
   lastSyncAt?: string;
   lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';
   lastSyncMessage?: string;

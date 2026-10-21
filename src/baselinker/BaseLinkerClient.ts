@@ -34,7 +34,23 @@ export class BaseLinkerClient {
     this.token = token;
   }
 
+  // Rate limiting: keep well under 50 queries per minute (max 1 request every 1250ms = 48 req/min)
+  private static lastRequestTimestamp = 0;
+  private static minRequestIntervalMs = 1300; // ~46 requests/min max
+
+  private async throttle(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLast = now - BaseLinkerClient.lastRequestTimestamp;
+    if (timeSinceLast < BaseLinkerClient.minRequestIntervalMs) {
+      const waitTime = BaseLinkerClient.minRequestIntervalMs - timeSinceLast;
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+    BaseLinkerClient.lastRequestTimestamp = Date.now();
+  }
+
   private async request<T = unknown>(method: string, parameters: Record<string, unknown> = {}): Promise<T> {
+    await this.throttle();
+
     const formData = new URLSearchParams();
     formData.append('token', this.token);
     formData.append('method', method);
@@ -42,7 +58,8 @@ export class BaseLinkerClient {
 
     const response = await axios.post(this.apiUrl, formData.toString(), {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-BLToken': this.token
       }
     });
 
@@ -82,65 +99,128 @@ export class BaseLinkerClient {
     return res;
   }
 
+  /**
+   * Bulk update prices using the official BaseLinker schema:
+   * products: { [productId]: { [priceGroupId]: price } }
+   */
   public async updateInventoryProductsPrices(
     inventoryId: number,
     productsPrices: Record<string | number, number>,
     priceGroupId?: number
   ): Promise<number> {
     const entries = Object.entries(productsPrices);
+    if (entries.length === 0) return 0;
+    if (priceGroupId === undefined) {
+      throw new Error('BaseLinker updateInventoryProductsPrices requires a valid price_group_id');
+    }
+
     let totalUpdated = 0;
     const CHUNK_SIZE = 1000;
 
     for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
       const chunk = entries.slice(i, i + CHUNK_SIZE);
-      const chunkRecord: Record<string, number> = {};
-      for (const [key, val] of chunk) {
-        chunkRecord[key] = val;
+      const chunkProducts: Record<string, Record<string, number>> = {};
+
+      for (const [productId, price] of chunk) {
+        chunkProducts[productId] = {
+          [String(priceGroupId)]: price
+        };
       }
 
-      const params: Record<string, unknown> = {
+      const params = {
         inventory_id: inventoryId,
-        products: chunkRecord
+        products: chunkProducts
       };
-      if (priceGroupId !== undefined) {
-        params.price_group_id = priceGroupId;
-      }
 
-      const res = await this.request<{ counter?: number }>('updateInventoryProductsPrices', params);
-      totalUpdated += res.counter || chunk.length;
+      const res = await this.request<{ counter?: number; warnings?: Record<string, string> }>(
+        'updateInventoryProductsPrices',
+        params
+      );
+      totalUpdated += res.counter ?? chunk.length;
     }
 
     return totalUpdated;
   }
 
+  /**
+   * Bulk update stocks using the official BaseLinker schema:
+   * products: { [productId]: { [warehouseId]: stock } }
+   */
   public async updateInventoryProductsStock(
     inventoryId: number,
     productsStock: Record<string | number, number>,
     warehouseId?: string
   ): Promise<number> {
     const entries = Object.entries(productsStock);
+    if (entries.length === 0) return 0;
+    if (!warehouseId) {
+      throw new Error('BaseLinker updateInventoryProductsStock requires a valid warehouse_id');
+    }
+
     let totalUpdated = 0;
     const CHUNK_SIZE = 1000;
 
     for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
       const chunk = entries.slice(i, i + CHUNK_SIZE);
-      const chunkRecord: Record<string, number> = {};
-      for (const [key, val] of chunk) {
-        chunkRecord[key] = val;
+      const chunkProducts: Record<string, Record<string, number>> = {};
+
+      for (const [productId, stock] of chunk) {
+        chunkProducts[productId] = {
+          [warehouseId]: stock
+        };
       }
 
-      const params: Record<string, unknown> = {
+      const params = {
         inventory_id: inventoryId,
-        products: chunkRecord
+        products: chunkProducts
       };
-      if (warehouseId !== undefined) {
-        params.warehouse_id = warehouseId;
-      }
 
-      const res = await this.request<{ counter?: number }>('updateInventoryProductsStock', params);
-      totalUpdated += res.counter || chunk.length;
+      const res = await this.request<{ counter?: number; warnings?: Record<string, string> }>(
+        'updateInventoryProductsStock',
+        params
+      );
+      totalUpdated += res.counter ?? chunk.length;
     }
 
     return totalUpdated;
+  }
+
+  /**
+   * Adds a new product to the BaseLinker inventory catalog if it doesn't exist
+   */
+  public async addInventoryProduct(params: {
+    inventory_id: number;
+    sku?: string;
+    ean?: string;
+    prices?: Record<number | string, number>;
+    stock?: Record<string, number>;
+    name?: string;
+  }): Promise<number> {
+    const reqParameters: Record<string, unknown> = {
+      inventory_id: params.inventory_id,
+      sku: params.sku || '',
+      ean: params.ean || ''
+    };
+
+    if (params.prices && Object.keys(params.prices).length > 0) {
+      reqParameters.prices = params.prices;
+    }
+
+    if (params.stock && Object.keys(params.stock).length > 0) {
+      reqParameters.stock = params.stock;
+    }
+
+    if (params.name) {
+      reqParameters.text_fields = {
+        name: params.name
+      };
+    }
+
+    const res = await this.request<{ status: string; product_id: number }>(
+      'addInventoryProduct',
+      reqParameters
+    );
+
+    return res.product_id;
   }
 }

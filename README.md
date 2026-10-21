@@ -5,6 +5,10 @@ Local automation tool designed to run directly on Windows to synchronize multipl
 ## Features
 
 - **Dynamic BaseLinker Hierarchy Discovery:** Fetches inventories, multi-warehouse accounts, and price groups directly via your BaseLinker API token.
+- **Strict Rate Limiting (< 50 QPM):** Built-in query throttling guarantees API calls remain safely below BaseLinker's 50 requests/minute quota.
+- **Local BaseLinker Products SQLite Cache:** Caches BaseLinker product IDs, SKUs, and EANs with full pagination (`getInventoryProductsList`) to avoid repetitive catalog lookups.
+- **Auto-Creation of Missing Items (`stock > 0`):** Products present in the XML feed that do not yet exist in BaseLinker are automatically created in the catalog via `addInventoryProduct` whenever stock > 0.
+- **Standard / Fixed Stock Setting:** Optionally define a constant stock value per feed profile that overrides feed stock levels to keep inventory at a guaranteed level.
 - **Multiple Feed Profiles:** Connect multiple supplier XML files (URLs or local `.xml` files) with individual scheduling and BaseLinker inventory/warehouse/price group targets.
 - **Visual XML Field Mapper:** Auto-inspects XML files and dynamically maps tags (SKU, EAN, Price, Stock) to handle changing supplier formats without code modifications.
 - **Incremental Diff Engine:** Tracks previous stock & price states in local SQLite to avoid redundant API calls and prevent rate-limiting (429).
@@ -20,16 +24,17 @@ Local automation tool designed to run directly on Windows to synchronize multipl
 3. In **Profiles & Sync**, click **+ Add Feed Profile**:
    - Select your target BaseLinker Inventory, Warehouse, and Price Group.
    - Choose **Source Type**: Remote URL (HTTP/HTTPS) or Local XML File (.xml) with file browser picker support.
+   - (Optional) Set **Standard / Fixed Stock** to enforce a fixed stock level whenever in stock.
 4. In **XML Field Mapper**, click **Auto-Detect XML Tags** and verify your field mappings with **Preview Parsed Items**.
 5. Click **Sync Now** or let the automated background scheduler sync periodically.
 
 ## Architecture
 
-- `src/storage/DatabaseManager.ts`: SQLite schema and data repository (`settings`, `profiles`, `sync_cache`, `sync_logs`).
-- `src/baselinker/BaseLinkerClient.ts`: BaseLinker API integration with chunking (1000 items) and dynamic hierarchy discovery.
+- `src/storage/DatabaseManager.ts`: SQLite schema and data repository (`settings`, `profiles`, `sync_cache`, `sync_logs`, `baselinker_products`).
+- `src/baselinker/BaseLinkerClient.ts`: BaseLinker API integration with < 50 QPM rate limiting, nested dictionary payloads, chunking (1000 items), product creation (`addInventoryProduct`), and dynamic hierarchy discovery.
 - `src/parser/XmlParserService.ts`: Streaming XML parser supporting dynamic dot-notation paths and candidate tag discovery.
 - `src/diff/DiffEngine.ts`: Calculates price/stock deltas against cached states.
-- `src/service/SyncCoordinator.ts`: Orchestrates ingestion, BaseLinker product ID resolution, and update dispatch.
+- `src/service/SyncCoordinator.ts`: Orchestrates ingestion, BaseLinker product ID resolution, pagination sync, auto-creation of missing items, and update dispatch.
 - `src/main.ts`: Electron desktop host with system tray and Windows startup hooks.
 - `public/`: UI dashboard, XML visual mapper, and log viewer.
 

@@ -131,7 +131,7 @@ async function loadProfiles() {
         <div class="profile-meta">
           <span>Source: <strong>${p.sourceType.toUpperCase()}</strong> (${p.sourcePath})</span>
           <span>Target Inv: <strong>${p.targetInventoryId}</strong> | Wh: <strong>${p.targetWarehouseId}</strong> | PriceGrp: <strong>${p.targetPriceGroupId}</strong></span>
-          <span>Match Key: <strong>${p.identifierField.toUpperCase()}</strong> | Interval: <strong>${p.syncIntervalMinutes}m</strong></span>
+          <span>Match Key: <strong>${p.identifierField.toUpperCase()}</strong> | Interval: <strong>${p.syncIntervalMinutes}m</strong>${p.fixedStock !== undefined && p.fixedStock !== null ? ` | Fixed Stock: <strong>${p.fixedStock}</strong>` : ''}</span>
           <span>Last Run: <strong>${p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString() : 'Never'}</strong></span>
           ${p.lastSyncMessage ? `<span style="font-size: 11px; color: var(--text-muted);">${p.lastSyncMessage}</span>` : ''}
         </div>
@@ -307,6 +307,7 @@ window.openProfileModal = function() {
   document.getElementById('prof-file-input').value = '';
   document.getElementById('prof-auth-header').value = '';
   document.getElementById('prof-interval').value = '30';
+  document.getElementById('prof-fixed-stock').value = '';
   document.getElementById('modal-title').textContent = 'Add Feed Profile';
   updateSourceTypeUI();
   document.getElementById('profile-modal').style.display = 'flex';
@@ -331,6 +332,7 @@ window.editProfile = function(id) {
   document.getElementById('prof-file-input').value = '';
   document.getElementById('prof-auth-header').value = p.authHeader || '';
   document.getElementById('prof-interval').value = p.syncIntervalMinutes;
+  document.getElementById('prof-fixed-stock').value = p.fixedStock !== undefined && p.fixedStock !== null ? p.fixedStock : '';
   document.getElementById('modal-title').textContent = 'Edit Profile: ' + p.name;
   updateSourceTypeUI();
   populateModalDropdowns(p.targetInventoryId, p.targetWarehouseId, p.targetPriceGroupId);
@@ -364,6 +366,7 @@ function populateModalDropdowns(invId, whId, pgId) {
 document.getElementById('btn-save-profile').addEventListener('click', async () => {
   const id = document.getElementById('prof-id').value;
   const existing = state.profiles.find(x => x.id === id);
+  const fixedStockVal = document.getElementById('prof-fixed-stock').value.trim();
 
   const profileData = {
     id: id || undefined,
@@ -377,6 +380,7 @@ document.getElementById('btn-save-profile').addEventListener('click', async () =
     targetPriceGroupId: parseInt(document.getElementById('prof-pricegroup').value, 10),
     identifierField: document.getElementById('prof-id-field').value,
     syncIntervalMinutes: parseInt(document.getElementById('prof-interval').value, 10) || 30,
+    fixedStock: fixedStockVal !== '' ? parseInt(fixedStockVal, 10) : null,
     mapping: existing ? existing.mapping : {
       itemTag: 'product',
       identifierField: 'sku',
