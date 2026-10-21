@@ -250,15 +250,53 @@ document.getElementById('btn-sync-all').addEventListener('click', async function
   loadProfiles();
 });
 
+function updateSourceTypeUI() {
+  const type = document.getElementById('prof-source-type').value;
+  const label = document.getElementById('prof-source-label');
+  const input = document.getElementById('prof-source-path');
+  const browseBtn = document.getElementById('btn-browse-file');
+  const authGroup = document.getElementById('prof-auth-group');
+
+  if (type === 'file') {
+    label.textContent = 'Local XML File Path';
+    input.placeholder = 'e.g. C:\\Feeds\\supplier.xml or /path/to/feed.xml';
+    browseBtn.style.display = 'inline-flex';
+    authGroup.style.display = 'none';
+  } else {
+    label.textContent = 'XML Feed URL';
+    input.placeholder = 'https://example.com/feed.xml';
+    browseBtn.style.display = 'none';
+    authGroup.style.display = 'flex';
+  }
+}
+
+document.getElementById('prof-source-type').addEventListener('change', updateSourceTypeUI);
+
+document.getElementById('btn-browse-file').addEventListener('click', () => {
+  document.getElementById('prof-file-input').click();
+});
+
+document.getElementById('prof-file-input').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (file) {
+    // In Electron, File objects provide the full filesystem path via .path
+    // If not available (e.g. web browser preview), fallback to file.name
+    const filePath = file.path || file.name;
+    document.getElementById('prof-source-path').value = filePath;
+  }
+});
+
 // Profile Modal Management
 window.openProfileModal = function() {
   document.getElementById('prof-id').value = '';
   document.getElementById('prof-name').value = '';
   document.getElementById('prof-source-type').value = 'url';
   document.getElementById('prof-source-path').value = '';
+  document.getElementById('prof-file-input').value = '';
   document.getElementById('prof-auth-header').value = '';
   document.getElementById('prof-interval').value = '30';
   document.getElementById('modal-title').textContent = 'Add Feed Profile';
+  updateSourceTypeUI();
   document.getElementById('profile-modal').style.display = 'flex';
   populateModalDropdowns();
 };
@@ -278,9 +316,11 @@ window.editProfile = function(id) {
   document.getElementById('prof-name').value = p.name;
   document.getElementById('prof-source-type').value = p.sourceType;
   document.getElementById('prof-source-path').value = p.sourcePath;
+  document.getElementById('prof-file-input').value = '';
   document.getElementById('prof-auth-header').value = p.authHeader || '';
   document.getElementById('prof-interval').value = p.syncIntervalMinutes;
   document.getElementById('modal-title').textContent = 'Edit Profile: ' + p.name;
+  updateSourceTypeUI();
   populateModalDropdowns(p.targetInventoryId, p.targetWarehouseId, p.targetPriceGroupId);
   document.getElementById('profile-modal').style.display = 'flex';
 };

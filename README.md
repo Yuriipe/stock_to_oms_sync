@@ -19,7 +19,7 @@ Local automation tool designed to run directly on Windows to synchronize multipl
    - Enable **Launch on Windows Boot** and **Minimize to System Tray** if desired.
 3. In **Profiles & Sync**, click **+ Add Feed Profile**:
    - Select your target BaseLinker Inventory, Warehouse, and Price Group.
-   - Enter your XML URL or local file path.
+   - Choose **Source Type**: Remote URL (HTTP/HTTPS) or Local XML File (.xml) with file browser picker support.
 4. In **XML Field Mapper**, click **Auto-Detect XML Tags** and verify your field mappings with **Preview Parsed Items**.
 5. Click **Sync Now** or let the automated background scheduler sync periodically.
 
