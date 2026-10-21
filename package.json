@@ -1,6 +1,6 @@
 {
   "name": "boltline-base-xml",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "",
   "main": "dist/main.js",
   "scripts": {
@@ -32,7 +32,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
