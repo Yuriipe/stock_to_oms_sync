@@ -466,11 +466,12 @@ document.getElementById('btn-inspect-xml').addEventListener('click', async () =>
 
 window.copyTagToActive = function(prop) {
   // Convenience helper: set into price/stock/sku depending on name pattern
-  if (prop.includes('price')) document.getElementById('map-price-path').value = prop;
-  else if (prop.includes('stock') || prop.includes('qty')) document.getElementById('map-stock-path').value = prop;
-  else if (prop.includes('sku') || prop.includes('code')) document.getElementById('map-sku-path').value = prop;
-  else if (prop.includes('ean') || prop.includes('barcode')) document.getElementById('map-ean-path').value = prop;
-  else if (prop.includes('name') || prop.includes('title')) document.getElementById('map-name-path').value = prop;
+  const lower = prop.toLowerCase();
+  if (lower.includes('price') || lower.includes('cena')) document.getElementById('map-price-path').value = prop;
+  else if (lower.includes('stock') || lower.includes('qty') || lower.includes('quantity') || lower.includes('stan') || lower.includes('ilosc')) document.getElementById('map-stock-path').value = prop;
+  else if (lower.includes('sku') || lower.includes('code') || lower.includes('kod')) document.getElementById('map-sku-path').value = prop;
+  else if (lower.includes('ean') || lower.includes('barcode')) document.getElementById('map-ean-path').value = prop;
+  else if (lower.includes('name') || lower.includes('title') || lower.includes('nazwa')) document.getElementById('map-name-path').value = prop;
 };
 
 // Preview Mapping

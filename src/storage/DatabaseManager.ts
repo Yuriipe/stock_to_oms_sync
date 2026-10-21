@@ -345,6 +345,29 @@ export class DatabaseManager {
     return row?.cnt || 0;
   }
 
+  public getBaseProductsMultiMap(inventoryId: number, identifierField: 'sku' | 'ean'): Map<string, number[]> {
+    const field = identifierField === 'sku' ? 'sku' : 'ean';
+    const rows = this.db.prepare(`
+      SELECT productId, ${field} as identifier
+      FROM baselinker_products
+      WHERE inventoryId = ? AND ${field} IS NOT NULL AND ${field} != ''
+    `).all(inventoryId) as Array<{ productId: number; identifier: string }>;
+
+    const map = new Map<string, number[]>();
+    for (const r of rows) {
+      if (r.identifier) {
+        const key = r.identifier.trim();
+        const existing = map.get(key);
+        if (existing) {
+          existing.push(r.productId);
+        } else {
+          map.set(key, [r.productId]);
+        }
+      }
+    }
+    return map;
+  }
+
   public getBaseProductsMap(inventoryId: number, identifierField: 'sku' | 'ean'): Map<string, number> {
     const field = identifierField === 'sku' ? 'sku' : 'ean';
     const rows = this.db.prepare(`

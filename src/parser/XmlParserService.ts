@@ -85,10 +85,50 @@ export class XmlParserService {
     const items: SupplierParsedItem[] = [];
 
     for (const node of itemNodes) {
-      const sku = mapping.skuPath ? this.resolvePath(node, mapping.skuPath) : undefined;
-      const ean = mapping.eanPath ? this.resolvePath(node, mapping.eanPath) : undefined;
-      const rawPrice = mapping.pricePath ? this.resolvePath(node, mapping.pricePath) : undefined;
-      const rawStock = mapping.stockPath ? this.resolvePath(node, mapping.stockPath) : undefined;
+      let sku = mapping.skuPath ? this.resolvePath(node, mapping.skuPath) : undefined;
+      if (!sku && mapping.identifierField === 'sku') {
+        for (const candidate of ['sku', 'kod', 'symbol', 'code']) {
+          const val = this.resolvePath(node, candidate);
+          if (val) {
+            sku = val;
+            break;
+          }
+        }
+      }
+
+      let ean = mapping.eanPath ? this.resolvePath(node, mapping.eanPath) : undefined;
+      if (!ean && mapping.identifierField === 'ean') {
+        for (const candidate of ['ean', 'barcode']) {
+          const val = this.resolvePath(node, candidate);
+          if (val) {
+            ean = val;
+            break;
+          }
+        }
+      }
+
+      let rawPrice = mapping.pricePath ? this.resolvePath(node, mapping.pricePath) : undefined;
+      if (rawPrice === undefined) {
+        for (const candidate of ['price', 'cena', 'price_brutto', 'cena_brutto', 'gross_price']) {
+          const val = this.resolvePath(node, candidate);
+          if (val !== undefined) {
+            rawPrice = val;
+            break;
+          }
+        }
+      }
+
+      let rawStock = mapping.stockPath ? this.resolvePath(node, mapping.stockPath) : undefined;
+      if (rawStock === undefined) {
+        for (const candidate of ['quantity', 'qty', 'stock', 'stan', 'ilosc', 'count']) {
+          const val = this.resolvePath(node, candidate);
+          if (val !== undefined) {
+            rawStock = val;
+            break;
+          }
+        }
+      }
+
       const name = mapping.namePath ? this.resolvePath(node, mapping.namePath) : undefined;
 
       const price = rawPrice ? parseFloat(rawPrice.replace(',', '.')) : 0;

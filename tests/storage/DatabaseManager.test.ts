@@ -90,4 +90,16 @@ describe('DatabaseManager & Storage Repository', () => {
     expect(logs).toHaveLength(1);
     expect(logs[0].itemsProcessed).toBe(150);
   });
+
+  it('should support multiple products with identical SKU in getBaseProductsMultiMap', () => {
+    dbManager.upsertBaseProducts(101, [
+      { productId: 1001, sku: 'ART-7714' },
+      { productId: 1002, sku: 'ART-7714' },
+      { productId: 1003, sku: 'EASY-99' }
+    ]);
+
+    const multiMap = dbManager.getBaseProductsMultiMap(101, 'sku');
+    expect(multiMap.get('ART-7714')).toEqual([1001, 1002]);
+    expect(multiMap.get('EASY-99')).toEqual([1003]);
+  });
 });

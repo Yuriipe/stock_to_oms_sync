@@ -98,13 +98,13 @@ export class SyncCoordinator {
         }
       }
 
-      let blProductMap = this.db.getBaseProductsMap(profile.targetInventoryId, profile.identifierField);
+      let blProductMultiMap = this.db.getBaseProductsMultiMap(profile.targetInventoryId, profile.identifierField);
 
       // 4. Auto-create products in BaseLinker if missing, stock > 0, and price > 0
       let createdCount = 0;
       for (const item of items) {
-        const existingBlId = blProductMap.get(item.identifier);
-        if (!existingBlId && item.stock > 0 && item.price > 0) {
+        const existingBlIds = blProductMultiMap.get(item.identifier);
+        if ((!existingBlIds || existingBlIds.length === 0) && item.stock > 0 && item.price > 0) {
           try {
             const formattedWh = /^\d+$/.test(profile.targetWarehouseId)
               ? `bl_${profile.targetWarehouseId}`
@@ -120,7 +120,7 @@ export class SyncCoordinator {
             });
 
             if (newBlId) {
-              blProductMap.set(item.identifier, newBlId);
+              blProductMultiMap.set(item.identifier, [newBlId]);
               this.db.saveSingleBaseProduct(
                 profile.targetInventoryId,
                 newBlId,
@@ -143,15 +143,17 @@ export class SyncCoordinator {
       const stocksToUpdate: Record<number, number> = {};
 
       for (const delta of deltas) {
-        const blId = blProductMap.get(delta.identifier);
-        if (!blId) continue; // Item not found in target BaseLinker inventory
+        const blIds = blProductMultiMap.get(delta.identifier);
+        if (!blIds || blIds.length === 0) continue; // Item not found in target BaseLinker inventory
 
-        // Prevent syncing 0 or negative prices to BaseLinker
-        if (delta.hasPriceChange && delta.newPrice !== undefined && delta.newPrice > 0) {
-          pricesToUpdate[blId] = delta.newPrice;
-        }
-        if (delta.hasStockChange && delta.newStock !== undefined) {
-          stocksToUpdate[blId] = delta.newStock;
+        for (const blId of blIds) {
+          // Prevent syncing 0 or negative prices to BaseLinker
+          if (delta.hasPriceChange && delta.newPrice !== undefined && delta.newPrice > 0) {
+            pricesToUpdate[blId] = delta.newPrice;
+          }
+          if (delta.hasStockChange && delta.newStock !== undefined) {
+            stocksToUpdate[blId] = delta.newStock;
+          }
         }
       }
 

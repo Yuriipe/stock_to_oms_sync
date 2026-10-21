@@ -101,4 +101,27 @@ describe('XmlParserService with Dynamic Mapping', () => {
     expect(candidates.sampleProperties).toContain('sku');
     expect(candidates.sampleProperties).toContain('price');
   });
+
+  it('should automatically fall back to quantity when stockPath is stock but XML uses quantity', async () => {
+    const xml = `
+      <products>
+        <product>
+          <sku>ART-123</sku>
+          <quantity>10</quantity>
+          <price>0.00</price>
+        </product>
+      </products>
+    `;
+    const items = await service.parseXml(xml, {
+      itemTag: 'product',
+      identifierField: 'sku',
+      skuPath: 'sku',
+      eanPath: 'ean',
+      pricePath: 'price',
+      stockPath: 'stock'
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].sku).toBe('ART-123');
+    expect(items[0].stock).toBe(10);
+  });
 });
