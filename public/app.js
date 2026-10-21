@@ -500,5 +500,157 @@ async function loadLogs() {
 
 document.getElementById('btn-refresh-logs').addEventListener('click', loadLogs);
 
+// Application Updates Controller
+async function checkAppUpdates(isManual = false) {
+  const btnTop = document.getElementById('btn-check-updates');
+  const btnSettings = document.getElementById('btn-settings-check-update');
+  const commitBadge = document.getElementById('app-commit-badge');
+  const updateBadge = document.getElementById('app-update-badge');
+  const updateBanner = document.getElementById('update-banner');
+  const settingCommit = document.getElementById('setting-current-commit');
+  const settingBranch = document.getElementById('setting-active-branch');
+  const settingStatusBadge = document.getElementById('setting-update-status-badge');
+  const btnApply = document.getElementById('btn-settings-apply-update');
+  const commitsPreview = document.getElementById('update-commits-preview');
+  const commitList = document.getElementById('incoming-commits-list');
+
+  try {
+    if (btnTop) btnTop.querySelector('.icon').classList.add('spin');
+    if (btnSettings) btnSettings.disabled = true;
+
+    const data = await api('/updates/status');
+
+    if (commitBadge) commitBadge.textContent = `${data.branch}@${data.currentShortCommit}`;
+    if (settingCommit) settingCommit.textContent = `${data.currentShortCommit} (${data.currentCommit})`;
+    if (settingBranch) settingBranch.textContent = data.branch;
+
+    if (data.hasUpdate) {
+      if (updateBadge) updateBadge.style.display = 'inline-block';
+      if (updateBanner) {
+        updateBanner.style.display = 'flex';
+        document.getElementById('update-banner-desc').textContent = 
+          `${data.commitsBehind || 1} new commit(s) available on remote '${data.branch}'. Current: ${data.currentShortCommit} ➔ Remote: ${data.remoteShortCommit}`;
+      }
+      if (settingStatusBadge) {
+        settingStatusBadge.innerHTML = `<span class="badge badge-warning">Update Available (${data.commitsBehind} behind)</span>`;
+      }
+      if (btnApply) btnApply.style.display = 'inline-block';
+
+      if (commitsPreview && commitList && data.commitMessages && data.commitMessages.length > 0) {
+        commitsPreview.style.display = 'block';
+        commitList.innerHTML = data.commitMessages.map(msg => `<li>${msg}</li>`).join('');
+      }
+
+      if (isManual) {
+        showToast('Update Available', `Found ${data.commitsBehind} new commit(s) on ${data.branch}`, 'info');
+      }
+    } else {
+      if (updateBadge) updateBadge.style.display = 'none';
+      if (updateBanner) updateBanner.style.display = 'none';
+      if (settingStatusBadge) {
+        settingStatusBadge.innerHTML = `<span class="badge badge-success">Up to date (${data.currentShortCommit})</span>`;
+      }
+      if (btnApply) btnApply.style.display = 'none';
+      if (commitsPreview) commitsPreview.style.display = 'none';
+
+      if (isManual) {
+        showToast('Up to Date', `Application is running the latest version (${data.currentShortCommit})`, 'success');
+      }
+    }
+  } catch (err) {
+    console.error('Update check error:', err);
+    if (isManual) {
+      showToast('Update Check Failed', err.message, 'error');
+    }
+  } finally {
+    if (btnTop) btnTop.querySelector('.icon').classList.remove('spin');
+    if (btnSettings) btnSettings.disabled = false;
+  }
+}
+
+async function triggerApplyUpdate() {
+  const btnBanner = document.getElementById('btn-banner-update');
+  const btnSettings = document.getElementById('btn-settings-apply-update');
+
+  const confirmed = confirm('Are you sure you want to pull the latest code updates and rebuild the application?');
+  if (!confirmed) return;
+
+  try {
+    if (btnBanner) {
+      btnBanner.disabled = true;
+      btnBanner.textContent = 'Updating...';
+    }
+    if (btnSettings) {
+      btnSettings.disabled = true;
+      btnSettings.textContent = 'Updating & Building...';
+    }
+
+    showToast('Updating Application', 'Pulling latest code and building...', 'info');
+
+    const result = await api('/updates/apply', { method: 'POST' });
+
+    showToast('Update Success', `${result.message} Restarting application...`, 'success');
+
+    // Trigger restart
+    setTimeout(async () => {
+      try {
+        await api('/updates/restart', { method: 'POST' });
+      } catch (e) {
+        // Expected if server shuts down
+      }
+      // Reload UI after restart
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
+    }, 1500);
+
+  } catch (err) {
+    console.error('Apply update error:', err);
+    showToast('Update Failed', err.message, 'error');
+    if (btnBanner) {
+      btnBanner.disabled = false;
+      btnBanner.textContent = '⚡ Update Now';
+    }
+    if (btnSettings) {
+      btnSettings.disabled = false;
+      btnSettings.textContent = '⚡ Update Application Now';
+    }
+  }
+}
+
+// Update Event Listeners
+document.getElementById('btn-check-updates')?.addEventListener('click', () => checkAppUpdates(true));
+document.getElementById('btn-settings-check-update')?.addEventListener('click', () => checkAppUpdates(true));
+document.getElementById('btn-banner-update')?.addEventListener('click', triggerApplyUpdate);
+document.getElementById('btn-settings-apply-update')?.addEventListener('click', triggerApplyUpdate);
+document.getElementById('btn-banner-dismiss')?.addEventListener('click', () => {
+  document.getElementById('update-banner').style.display = 'none';
+});
+
+// Toast notification helper
+function showToast(title, message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <div class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</div>
+    <div class="toast-content">
+      <div class="toast-title">${title}</div>
+      <div class="toast-message">${message}</div>
+    </div>
+  `;
+
+  container.appendChild(toast);
+  setTimeout(() => toast.classList.add('show'), 10);
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
 // Initialize on page load
 init();
+checkAppUpdates(false);
+

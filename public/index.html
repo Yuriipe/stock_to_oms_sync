@@ -41,16 +41,38 @@
           <span class="status-dot"></span>
           <span id="service-status">Engine Running</span>
         </div>
+        <div class="app-version-box">
+          <span class="commit-pill" id="app-commit-badge">Commit: loading...</span>
+          <span class="update-badge" id="app-update-badge" style="display:none;">Update Available</span>
+        </div>
         <div class="tray-tip">Minimizes to Windows Tray</div>
       </div>
     </aside>
 
     <!-- Main Content Area -->
     <main class="main-content">
+      <!-- Update Alert Banner -->
+      <div id="update-banner" class="update-alert-banner" style="display:none;">
+        <div class="update-banner-content">
+          <span class="icon">🚀</span>
+          <div class="update-banner-text">
+            <strong>Application Update Available!</strong>
+            <span id="update-banner-desc">New code changes are available from remote repository.</span>
+          </div>
+        </div>
+        <div class="update-banner-actions">
+          <button id="btn-banner-update" class="btn btn-sm btn-primary">⚡ Update Now</button>
+          <button id="btn-banner-dismiss" class="btn btn-sm btn-outline">Dismiss</button>
+        </div>
+      </div>
+
       <!-- Top Bar -->
       <header class="topbar">
         <h1 id="page-title">Feed Profiles & Sync Status</h1>
         <div class="topbar-actions">
+          <button id="btn-check-updates" class="btn btn-outline" title="Check GitHub for application updates">
+            <span class="icon">🔄</span> Check for Updates
+          </button>
           <button id="btn-sync-all" class="btn btn-primary">
             <span class="icon">⚡</span> Sync All Active Feeds
           </button>
@@ -214,6 +236,44 @@
               <input type="checkbox" id="setting-tray" checked>
               <span class="slider"></span>
             </label>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="panel-header">
+            <h3>Application Updates & Version Control</h3>
+            <p>Check for code updates from the connected Git repository and update with one click.</p>
+          </div>
+
+          <div class="update-card" id="update-details-box">
+            <div class="update-meta-row">
+              <div>
+                <span class="meta-label">Current Version / Commit</span>
+                <span class="meta-val font-mono" id="setting-current-commit">Checking...</span>
+              </div>
+              <div>
+                <span class="meta-label">Active Branch</span>
+                <span class="meta-val font-mono" id="setting-active-branch">main</span>
+              </div>
+              <div>
+                <span class="meta-label">Update Status</span>
+                <span class="meta-val" id="setting-update-status-badge"><span class="badge badge-info">Up to date</span></span>
+              </div>
+            </div>
+
+            <div id="update-commits-preview" style="display:none; margin-top: 15px;">
+              <span class="meta-label">Incoming Changes:</span>
+              <ul class="commit-list" id="incoming-commits-list"></ul>
+            </div>
+
+            <div class="update-card-actions" style="margin-top: 16px;">
+              <button id="btn-settings-check-update" class="btn btn-secondary">
+                <span class="icon">🔍</span> Check for Updates
+              </button>
+              <button id="btn-settings-apply-update" class="btn btn-primary" style="display:none;">
+                <span class="icon">⚡</span> Update Application Now
+              </button>
+            </div>
           </div>
 
           <div class="form-actions" style="margin-top: 30px;">

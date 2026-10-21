@@ -8,8 +8,15 @@ import { XmlParserService } from '../parser/XmlParserService';
 import { SyncCoordinator } from '../service/SyncCoordinator';
 import { DiffEngine } from '../diff/DiffEngine';
 import { FeedProfile } from '../types';
+import { AppUpdateService } from '../service/AppUpdateService';
 
-export function createApiServer(db: DatabaseManager) {
+export function createApiServer(
+  db: DatabaseManager,
+  options?: {
+    onRestart?: () => void;
+    repoDir?: string;
+  }
+) {
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -17,9 +24,42 @@ export function createApiServer(db: DatabaseManager) {
   const xmlParser = new XmlParserService();
   const diffEngine = new DiffEngine(db);
   const syncCoordinator = new SyncCoordinator(db, xmlParser, diffEngine);
+  const updateService = new AppUpdateService(options?.repoDir || process.cwd());
 
   // Serve static UI assets if built
   app.use(express.static('public'));
+
+  // Get App Update Status
+  app.get('/api/updates/status', async (req, res) => {
+    try {
+      const status = await updateService.checkForUpdates();
+      res.json(status);
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // Trigger Apply Update (git pull + build)
+  app.post('/api/updates/apply', async (req, res) => {
+    try {
+      const result = await updateService.applyUpdate();
+      res.json(result);
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // Trigger Application Restart
+  app.post('/api/updates/restart', (req, res) => {
+    res.json({ success: true, message: 'Restarting application...' });
+    setTimeout(() => {
+      if (options?.onRestart) {
+        options.onRestart();
+      } else {
+        updateService.restartApp();
+      }
+    }, 1000);
+  });
 
   // Get App Settings
   app.get('/api/settings', (req, res) => {

@@ -10,7 +10,14 @@ let isQuitting = false;
 const db = new DatabaseManager(path.join(app.getPath('userData'), 'boltline.sqlite'));
 db.initialize();
 
-const { app: expressApp, syncCoordinator } = createApiServer(db);
+const { app: expressApp, syncCoordinator } = createApiServer(db, {
+  onRestart: () => {
+    isQuitting = true;
+    app.relaunch();
+    app.exit(0);
+  },
+  repoDir: app.getAppPath ? app.getAppPath() : process.cwd()
+});
 
 const settings = db.getSettings();
 const PORT = settings.serverPort || 3890;
