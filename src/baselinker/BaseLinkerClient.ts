@@ -136,7 +136,14 @@ export class BaseLinkerClient {
         'updateInventoryProductsPrices',
         params
       );
-      totalUpdated += res.counter ?? chunk.length;
+
+      const warningsCount = res.warnings ? Object.keys(res.warnings).length : 0;
+      if (warningsCount > 0) {
+        console.warn('BaseLinker updateInventoryProductsPrices warnings:', res.warnings);
+      }
+
+      const successInChunk = Math.max(0, (res.counter ?? chunk.length) - warningsCount);
+      totalUpdated += successInChunk;
     }
 
     return totalUpdated;
@@ -157,6 +164,9 @@ export class BaseLinkerClient {
       throw new Error('BaseLinker updateInventoryProductsStock requires a valid warehouse_id');
     }
 
+    // BaseLinker requires catalog warehouses to be formatted as bl_[id] (e.g., bl_57486)
+    const formattedWarehouseId = /^\d+$/.test(warehouseId) ? `bl_${warehouseId}` : warehouseId;
+
     let totalUpdated = 0;
     const CHUNK_SIZE = 1000;
 
@@ -166,7 +176,7 @@ export class BaseLinkerClient {
 
       for (const [productId, stock] of chunk) {
         chunkProducts[productId] = {
-          [warehouseId]: stock
+          [formattedWarehouseId]: stock
         };
       }
 
@@ -179,10 +189,53 @@ export class BaseLinkerClient {
         'updateInventoryProductsStock',
         params
       );
-      totalUpdated += res.counter ?? chunk.length;
+
+      const warningsCount = res.warnings ? Object.keys(res.warnings).length : 0;
+      if (warningsCount > 0) {
+        console.warn('BaseLinker updateInventoryProductsStock warnings:', res.warnings);
+      }
+
+      const successInChunk = Math.max(0, (res.counter ?? chunk.length) - warningsCount);
+      totalUpdated += successInChunk;
     }
 
     return totalUpdated;
+  }
+
+  /**
+   * Fetches all products across all pages for a given BaseLinker inventory
+   */
+  public async fetchAllInventoryProducts(
+    inventoryId: number
+  ): Promise<Array<{ productId: number; sku?: string; ean?: string; name?: string }>> {
+    let page = 1;
+    let hasMore = true;
+    const allProducts: Array<{ productId: number; sku?: string; ean?: string; name?: string }> = [];
+
+    while (hasMore) {
+      const listRes = await this.getInventoryProductsList(inventoryId, page);
+      const products = Object.values(listRes.products || {});
+      if (products.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const p of products) {
+        allProducts.push({
+          productId: p.id,
+          sku: p.sku ? String(p.sku).trim() : undefined,
+          ean: p.ean ? String(p.ean).trim() : undefined
+        });
+      }
+
+      if (products.length < 1000) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+
+    return allProducts;
   }
 
   /**

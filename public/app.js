@@ -717,8 +717,11 @@ function showToast(title, message, type = 'info') {
   }, 4000);
 }
 
+let currentModalInventoryId = null;
+
 // BaseLinker Products Modal Logic
 window.openBaseProductsModal = async function(inventoryId) {
+  currentModalInventoryId = inventoryId;
   const modal = document.getElementById('base-products-modal');
   const tbody = document.getElementById('base-products-tbody');
   const summary = document.getElementById('base-products-summary');
@@ -729,12 +732,19 @@ window.openBaseProductsModal = async function(inventoryId) {
   tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>';
   modal.style.display = 'flex';
 
+  await loadBaseProductsList(inventoryId);
+};
+
+async function loadBaseProductsList(inventoryId) {
+  const tbody = document.getElementById('base-products-tbody');
+  const summary = document.getElementById('base-products-summary');
+
   try {
     const res = await api(`/baselinker/products?inventoryId=${inventoryId}&limit=100`);
     summary.innerHTML = `Total cached in DB: <strong>${res.total}</strong> (showing latest ${res.products.length})`;
 
     if (res.products.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 24px;">No products cached yet. Click "⚡ Sync Now" to pull products with pagination from BaseLinker.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 24px;">No products cached yet. Click "🔄 Refresh from BaseLinker" or run a sync.</td></tr>';
       return;
     }
 
@@ -750,7 +760,30 @@ window.openBaseProductsModal = async function(inventoryId) {
     summary.textContent = 'Error loading products';
     tbody.innerHTML = `<tr><td colspan="4" style="color: var(--color-danger); text-align: center;">${err.message}</td></tr>`;
   }
-};
+}
+
+document.getElementById('btn-refresh-base-products')?.addEventListener('click', async function() {
+  if (!currentModalInventoryId) return;
+  const btn = this;
+  const originalText = btn.textContent;
+  btn.textContent = '⏳ Fetching from BaseLinker...';
+  btn.disabled = true;
+
+  try {
+    const res = await api('/baselinker/products/refresh', {
+      method: 'POST',
+      body: { inventoryId: currentModalInventoryId }
+    });
+    showToast('Catalog Refreshed', `Fetched and cached ${res.count} products from BaseLinker.`, 'success', 4000);
+    await loadBaseProductsList(currentModalInventoryId);
+    await loadProfiles();
+  } catch (err) {
+    showToast('Refresh Failed', err.message, 'error', 5000);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+});
 
 document.getElementById('btn-close-base-products-modal')?.addEventListener('click', () => {
   document.getElementById('base-products-modal').style.display = 'none';

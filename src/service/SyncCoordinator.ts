@@ -89,56 +89,33 @@ export class SyncCoordinator {
       }
 
       // 3. Match against BaseLinker product IDs using local DB cache
-      // Check if we already have cached products for targetInventoryId
-      let blProductMap = this.db.getBaseProductsMap(profile.targetInventoryId, profile.identifierField);
-
-      // If local DB has no products for this inventory, pull all pages from BaseLinker with pagination
-      if (blProductMap.size === 0) {
-        let page = 1;
-        let hasMore = true;
-        const productsToCache: Array<{ productId: number; sku?: string; ean?: string }> = [];
-
-        while (hasMore) {
-          const listRes = await client.getInventoryProductsList(profile.targetInventoryId, page);
-          const products = Object.values(listRes.products || {});
-          if (products.length === 0) {
-            hasMore = false;
-            break;
-          }
-
-          for (const p of products) {
-            productsToCache.push({
-              productId: p.id,
-              sku: p.sku ? p.sku.trim() : undefined,
-              ean: p.ean ? p.ean.trim() : undefined
-            });
-          }
-
-          if (products.length < 1000) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        }
-
-        if (productsToCache.length > 0) {
-          this.db.upsertBaseProducts(profile.targetInventoryId, productsToCache);
-          blProductMap = this.db.getBaseProductsMap(profile.targetInventoryId, profile.identifierField);
+      // Check if we already have cached products for targetInventoryId in SQLite
+      const cachedCount = this.db.getBaseProductsCount(profile.targetInventoryId);
+      if (cachedCount === 0) {
+        const fetchedProducts = await client.fetchAllInventoryProducts(profile.targetInventoryId);
+        if (fetchedProducts.length > 0) {
+          this.db.upsertBaseProducts(profile.targetInventoryId, fetchedProducts);
         }
       }
 
-      // 4. Auto-create products in BaseLinker if missing and stock > 0
+      let blProductMap = this.db.getBaseProductsMap(profile.targetInventoryId, profile.identifierField);
+
+      // 4. Auto-create products in BaseLinker if missing, stock > 0, and price > 0
       let createdCount = 0;
       for (const item of items) {
         const existingBlId = blProductMap.get(item.identifier);
-        if (!existingBlId && item.stock > 0) {
+        if (!existingBlId && item.stock > 0 && item.price > 0) {
           try {
+            const formattedWh = /^\d+$/.test(profile.targetWarehouseId)
+              ? `bl_${profile.targetWarehouseId}`
+              : profile.targetWarehouseId;
+
             const newBlId = await client.addInventoryProduct({
               inventory_id: profile.targetInventoryId,
               sku: item.sku || (profile.identifierField === 'sku' ? item.identifier : undefined),
               ean: item.ean || (profile.identifierField === 'ean' ? item.identifier : undefined),
               prices: { [profile.targetPriceGroupId]: item.price },
-              stock: { [profile.targetWarehouseId]: item.stock },
+              stock: { [formattedWh]: item.stock },
               name: item.name || item.sku || item.identifier
             });
 
@@ -169,7 +146,8 @@ export class SyncCoordinator {
         const blId = blProductMap.get(delta.identifier);
         if (!blId) continue; // Item not found in target BaseLinker inventory
 
-        if (delta.hasPriceChange && delta.newPrice !== undefined) {
+        // Prevent syncing 0 or negative prices to BaseLinker
+        if (delta.hasPriceChange && delta.newPrice !== undefined && delta.newPrice > 0) {
           pricesToUpdate[blId] = delta.newPrice;
         }
         if (delta.hasStockChange && delta.newStock !== undefined) {

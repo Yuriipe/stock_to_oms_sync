@@ -6,8 +6,10 @@ Local automation tool designed to run directly on Windows to synchronize multipl
 
 - **Dynamic BaseLinker Hierarchy Discovery:** Fetches inventories, multi-warehouse accounts, and price groups directly via your BaseLinker API token.
 - **Strict Rate Limiting (< 50 QPM):** Built-in query throttling guarantees API calls remain safely below BaseLinker's 50 requests/minute quota.
-- **Local BaseLinker Products SQLite Cache:** Caches BaseLinker product IDs, SKUs, and EANs with full pagination (`getInventoryProductsList`) to avoid repetitive catalog lookups.
-- **Auto-Creation of Missing Items (`stock > 0`):** Products present in the XML feed that do not yet exist in BaseLinker are automatically created in the catalog via `addInventoryProduct` whenever stock > 0.
+- **Local BaseLinker Products SQLite Cache & Viewer:** Caches BaseLinker product IDs, SKUs, and EANs with full pagination (`getInventoryProductsList`) to avoid repetitive catalog lookups. Includes an in-dashboard modal with on-demand **"🔄 Refresh from BaseLinker"** capability.
+- **Zero-Price Protection:** Strictly prevents 0.00 or negative price overrides from syncing or auto-creating catalog products in BaseLinker.
+- **Catalog Warehouse ID Normalization:** Automatically standardizes warehouse IDs (e.g. `bl_57486`) to conform with BaseLinker API requirements.
+- **Auto-Creation of Missing Items (`stock > 0` & `price > 0`):** Products present in the XML feed that do not yet exist in BaseLinker are automatically created in the catalog via `addInventoryProduct`.
 - **Standard / Fixed Stock Setting:** Optionally define a constant stock value per feed profile that overrides feed stock levels to keep inventory at a guaranteed level.
 - **Multiple Feed Profiles:** Connect multiple supplier XML files (URLs or local `.xml` files) with individual scheduling and BaseLinker inventory/warehouse/price group targets.
 - **Visual XML Field Mapper:** Auto-inspects XML files and dynamically maps tags (SKU, EAN, Price, Stock) to handle changing supplier formats without code modifications.

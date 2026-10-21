@@ -222,6 +222,31 @@ export function createApiServer(
     }
   });
 
+  // Force Refresh BaseLinker Products into Local SQLite Cache
+  app.post('/api/baselinker/products/refresh', async (req, res) => {
+    try {
+      const inventoryId = parseInt(req.body.inventoryId, 10);
+      if (!inventoryId) {
+        return res.status(400).json({ error: 'inventoryId required in body' });
+      }
+
+      const settings = db.getSettings();
+      if (!settings.baseLinkerToken) {
+        return res.status(400).json({ error: 'BaseLinker token not configured' });
+      }
+
+      const client = new BaseLinkerClient(settings.baseLinkerToken);
+      const products = await client.fetchAllInventoryProducts(inventoryId);
+      if (products.length > 0) {
+        db.upsertBaseProducts(inventoryId, products);
+      }
+
+      res.json({ success: true, count: products.length });
+    } catch (e: unknown) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
   // Save/Update Profile
   app.post('/api/profiles', (req, res) => {
     try {

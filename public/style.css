@@ -241,6 +241,7 @@ body {
 
 .profile-card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: auto;
 }
@@ -474,6 +475,11 @@ input:checked + .slider:before { transform: translateX(24px); }
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow);
+}
+
+.modal-card-lg {
+  width: 780px;
+  max-width: 95%;
 }
 
 .modal-header {

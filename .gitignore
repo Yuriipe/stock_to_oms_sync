@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.sqlite
 *.sqlite-journal
+*.db
 *.log
 .DS_Store
 .env
