@@ -422,6 +422,37 @@
     </div>
   </div>
 
+  <!-- View BaseLinker Products Modal -->
+  <div id="base-products-modal" class="modal" style="display:none;">
+    <div class="modal-content max-w-700">
+      <div class="modal-header">
+        <h3 id="base-products-modal-title">BaseLinker Catalog Products</h3>
+        <button id="btn-close-base-products-modal" class="btn-icon">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span id="base-products-summary" style="font-size: 0.875rem; color: var(--text-muted);">Total cached in DB: 0</span>
+        </div>
+        <div class="table-scroll" style="max-height: 400px; overflow-y: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Base Product ID</th>
+                <th>SKU</th>
+                <th>EAN</th>
+                <th>Last Cached</th>
+              </tr>
+            </thead>
+            <tbody id="base-products-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-close-base-products" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notifications Container -->
   <div id="toast-container"></div>
 

@@ -132,12 +132,14 @@ async function loadProfiles() {
           <span>Source: <strong>${p.sourceType.toUpperCase()}</strong> (${p.sourcePath})</span>
           <span>Target Inv: <strong>${p.targetInventoryId}</strong> | Wh: <strong>${p.targetWarehouseId}</strong> | PriceGrp: <strong>${p.targetPriceGroupId}</strong></span>
           <span>Match Key: <strong>${p.identifierField.toUpperCase()}</strong> | Interval: <strong>${p.syncIntervalMinutes}m</strong>${p.fixedStock !== undefined && p.fixedStock !== null ? ` | Fixed Stock: <strong>${p.fixedStock}</strong>` : ''}</span>
+          <span>Base Products Cached: <strong style="color: var(--color-primary); cursor: pointer;" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 ${p.baseProductsCount ?? 0} items</strong></span>
           <span>Last Run: <strong>${p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString() : 'Never'}</strong></span>
           ${p.lastSyncMessage ? `<span style="font-size: 11px; color: var(--text-muted);">${p.lastSyncMessage}</span>` : ''}
         </div>
 
         <div class="profile-card-actions">
           <button class="btn btn-primary" onclick="triggerSync('${p.id}', this)">⚡ Sync Now</button>
+          <button class="btn btn-secondary" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 View Base Products (${p.baseProductsCount ?? 0})</button>
           <button class="btn btn-secondary" onclick="goToMapper('${p.id}')">🧩 Edit Mapping</button>
           <button class="btn btn-danger" onclick="deleteProfile('${p.id}')">Delete</button>
         </div>
@@ -714,6 +716,48 @@ function showToast(title, message, type = 'info') {
     setTimeout(() => toast.remove(), 300);
   }, 4000);
 }
+
+// BaseLinker Products Modal Logic
+window.openBaseProductsModal = async function(inventoryId) {
+  const modal = document.getElementById('base-products-modal');
+  const tbody = document.getElementById('base-products-tbody');
+  const summary = document.getElementById('base-products-summary');
+  const title = document.getElementById('base-products-modal-title');
+
+  title.textContent = `BaseLinker Catalog Products (Inventory ID: ${inventoryId})`;
+  summary.textContent = 'Loading products from local cache...';
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>';
+  modal.style.display = 'flex';
+
+  try {
+    const res = await api(`/baselinker/products?inventoryId=${inventoryId}&limit=100`);
+    summary.innerHTML = `Total cached in DB: <strong>${res.total}</strong> (showing latest ${res.products.length})`;
+
+    if (res.products.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 24px;">No products cached yet. Click "⚡ Sync Now" to pull products with pagination from BaseLinker.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = res.products.map(p => `
+      <tr>
+        <td class="font-mono"><strong>${p.productId}</strong></td>
+        <td class="font-mono">${p.sku || '<span style="color:var(--text-muted);">-</span>'}</td>
+        <td class="font-mono">${p.ean || '<span style="color:var(--text-muted);">-</span>'}</td>
+        <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(p.updatedAt).toLocaleString()}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    summary.textContent = 'Error loading products';
+    tbody.innerHTML = `<tr><td colspan="4" style="color: var(--color-danger); text-align: center;">${err.message}</td></tr>`;
+  }
+};
+
+document.getElementById('btn-close-base-products-modal')?.addEventListener('click', () => {
+  document.getElementById('base-products-modal').style.display = 'none';
+});
+document.getElementById('btn-close-base-products')?.addEventListener('click', () => {
+  document.getElementById('base-products-modal').style.display = 'none';
+});
 
 // Initialize on page load
 init();

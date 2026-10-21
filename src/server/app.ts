@@ -194,7 +194,29 @@ export function createApiServer(
   // Get Profiles
   app.get('/api/profiles', (req, res) => {
     try {
-      res.json(db.getProfiles());
+      const profiles = db.getProfiles();
+      // Attach cached BaseLinker product count for convenience
+      const enriched = profiles.map(p => ({
+        ...p,
+        baseProductsCount: db.getBaseProductsCount(p.targetInventoryId)
+      }));
+      res.json(enriched);
+    } catch (e: unknown) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
+  // Get Cached BaseLinker Products for an Inventory
+  app.get('/api/baselinker/products', (req, res) => {
+    try {
+      const inventoryId = parseInt(req.query.inventoryId as string, 10);
+      if (!inventoryId) {
+        return res.status(400).json({ error: 'inventoryId query param required' });
+      }
+      const limit = Math.min(parseInt(req.query.limit as string, 10) || 50, 200);
+      const offset = parseInt(req.query.offset as string, 10) || 0;
+      const data = db.getBaseProductsList(inventoryId, limit, offset);
+      res.json(data);
     } catch (e: unknown) {
       res.status(500).json({ error: String(e) });
     }

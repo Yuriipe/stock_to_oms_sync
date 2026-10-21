@@ -386,4 +386,27 @@ export class DatabaseManager {
   public saveSingleBaseProduct(inventoryId: number, productId: number, sku?: string, ean?: string): void {
     this.upsertBaseProducts(inventoryId, [{ productId, sku, ean }]);
   }
+
+  public getBaseProductsList(inventoryId: number, limit: number = 100, offset: number = 0): { total: number; products: Array<{ productId: number; sku?: string; ean?: string; updatedAt: string }> } {
+    const totalRow = this.db.prepare('SELECT COUNT(*) as cnt FROM baselinker_products WHERE inventoryId = ?').get(inventoryId) as { cnt: number } | undefined;
+    const total = totalRow?.cnt || 0;
+
+    const rows = this.db.prepare(`
+      SELECT productId, sku, ean, updatedAt
+      FROM baselinker_products
+      WHERE inventoryId = ?
+      ORDER BY productId DESC
+      LIMIT ? OFFSET ?
+    `).all(inventoryId, limit, offset) as Array<{ productId: number; sku: string | null; ean: string | null; updatedAt: string }>;
+
+    return {
+      total,
+      products: rows.map(r => ({
+        productId: r.productId,
+        sku: r.sku || undefined,
+        ean: r.ean || undefined,
+        updatedAt: r.updatedAt
+      }))
+    };
+  }
 }
