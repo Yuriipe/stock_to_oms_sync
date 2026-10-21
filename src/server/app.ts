@@ -10,12 +10,14 @@ import { SyncCoordinator } from '../service/SyncCoordinator';
 import { DiffEngine } from '../diff/DiffEngine';
 import { FeedProfile } from '../types';
 import { AppUpdateService } from '../service/AppUpdateService';
+import { resolveLocalFilePath } from '../utils/fileResolver';
 
 export function createApiServer(
   db: DatabaseManager,
   options?: {
     onRestart?: () => void;
     repoDir?: string;
+    onSelectFile?: () => Promise<string | null>;
   }
 ) {
   const app = express();
@@ -33,6 +35,19 @@ export function createApiServer(
     : path.join(__dirname, '../public');
   const finalPublicDir = fs.existsSync(publicDir) ? publicDir : path.join(process.cwd(), 'public');
   app.use(express.static(finalPublicDir));
+
+  // Open native OS file dialog if supported (Electron)
+  app.post('/api/system/select-file', async (req, res) => {
+    try {
+      if (options?.onSelectFile) {
+        const selected = await options.onSelectFile();
+        return res.json({ supported: true, filePath: selected });
+      }
+      return res.json({ supported: false, filePath: null });
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
 
   // Get App Update Status
   app.get('/api/updates/status', async (req, res) => {
@@ -125,10 +140,11 @@ export function createApiServer(
         const response = await axios.get(sourcePath, { headers, timeout: 20000, responseType: 'text' });
         xmlContent = response.data;
       } else if (!xmlContent && sourceType === 'file' && sourcePath) {
-        if (!fs.existsSync(sourcePath)) {
+        const resolvedPath = resolveLocalFilePath(sourcePath);
+        if (!resolvedPath) {
           return res.status(400).json({ error: `File not found: ${sourcePath}` });
         }
-        xmlContent = fs.readFileSync(sourcePath, 'utf-8');
+        xmlContent = fs.readFileSync(resolvedPath, 'utf-8');
       }
 
       if (!xmlContent) {
@@ -157,7 +173,11 @@ export function createApiServer(
         const response = await axios.get(sourcePath, { headers, timeout: 20000, responseType: 'text' });
         xmlContent = response.data;
       } else if (!xmlContent && sourceType === 'file' && sourcePath) {
-        xmlContent = fs.readFileSync(sourcePath, 'utf-8');
+        const resolvedPath = resolveLocalFilePath(sourcePath);
+        if (!resolvedPath) {
+          return res.status(400).json({ error: `File not found: ${sourcePath}` });
+        }
+        xmlContent = fs.readFileSync(resolvedPath, 'utf-8');
       }
 
       if (!xmlContent || !mapping) {
@@ -186,6 +206,12 @@ export function createApiServer(
       const profile = req.body as FeedProfile;
       if (!profile.id) {
         profile.id = 'prof_' + Date.now();
+      }
+      if (profile.sourceType === 'file' && profile.sourcePath) {
+        const resolved = resolveLocalFilePath(profile.sourcePath);
+        if (resolved) {
+          profile.sourcePath = resolved;
+        }
       }
       db.saveProfile(profile);
       res.json({ success: true, profile: db.getProfileById(profile.id) });

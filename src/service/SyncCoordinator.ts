@@ -2,6 +2,7 @@ import fs from 'fs';
 import axios from 'axios';
 import { DatabaseManager } from '../storage/DatabaseManager';
 import { BaseLinkerClient } from '../baselinker/BaseLinkerClient';
+import { resolveLocalFilePath } from '../utils/fileResolver';
 import { XmlParserService } from '../parser/XmlParserService';
 import { DiffEngine } from '../diff/DiffEngine';
 import { FeedProfile } from '../types';
@@ -28,10 +29,11 @@ export class SyncCoordinator {
 
   private async loadXmlContent(profile: FeedProfile): Promise<string> {
     if (profile.sourceType === 'file') {
-      if (!fs.existsSync(profile.sourcePath)) {
+      const resolvedPath = resolveLocalFilePath(profile.sourcePath);
+      if (!resolvedPath) {
         throw new Error(`Local file not found: ${profile.sourcePath}`);
       }
-      return fs.readFileSync(profile.sourcePath, 'utf-8');
+      return fs.readFileSync(resolvedPath, 'utf-8');
     } else {
       const headers: Record<string, string> = {};
       if (profile.authHeader) {

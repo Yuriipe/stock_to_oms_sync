@@ -272,15 +272,27 @@ function updateSourceTypeUI() {
 
 document.getElementById('prof-source-type').addEventListener('change', updateSourceTypeUI);
 
-document.getElementById('btn-browse-file').addEventListener('click', () => {
+document.getElementById('btn-browse-file').addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/system/select-file', { method: 'POST' });
+    const data = await res.json();
+    if (data && data.supported) {
+      if (data.filePath) {
+        document.getElementById('prof-source-path').value = data.filePath;
+      }
+      return;
+    }
+  } catch (err) {
+    console.warn('Native file picker request failed, falling back to input:', err);
+  }
+  // Fallback if running outside Electron or if route returned unsupported
   document.getElementById('prof-file-input').click();
 });
 
 document.getElementById('prof-file-input').addEventListener('change', (e) => {
   const file = e.target.files && e.target.files[0];
   if (file) {
-    // In Electron, File objects provide the full filesystem path via .path
-    // If not available (e.g. web browser preview), fallback to file.name
+    // In Electron with full path access, file.path is populated; otherwise file.name
     const filePath = file.path || file.name;
     document.getElementById('prof-source-path').value = filePath;
   }

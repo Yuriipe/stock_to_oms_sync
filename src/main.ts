@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } from 'electron';
 import path from 'path';
 import { DatabaseManager } from './storage/DatabaseManager';
 import { createApiServer } from './server/app';
@@ -16,7 +16,32 @@ const { app: expressApp, syncCoordinator } = createApiServer(db, {
     app.relaunch();
     app.exit(0);
   },
-  repoDir: app.getAppPath ? app.getAppPath() : process.cwd()
+  repoDir: app.getAppPath ? app.getAppPath() : process.cwd(),
+  onSelectFile: async () => {
+    const win = mainWindow || BrowserWindow.getFocusedWindow();
+    const result = win
+      ? await dialog.showOpenDialog(win, {
+          title: 'Select XML Feed File',
+          properties: ['openFile'],
+          filters: [
+            { name: 'XML Files', extensions: ['xml'] },
+            { name: 'All Files', extensions: ['*'] }
+          ]
+        })
+      : await dialog.showOpenDialog({
+          title: 'Select XML Feed File',
+          properties: ['openFile'],
+          filters: [
+            { name: 'XML Files', extensions: ['xml'] },
+            { name: 'All Files', extensions: ['*'] }
+          ]
+        });
+
+    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+      return null;
+    }
+    return result.filePaths[0];
+  }
 });
 
 const settings = db.getSettings();
