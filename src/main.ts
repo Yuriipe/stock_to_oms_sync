@@ -48,7 +48,16 @@ registerBrowserFetcher(async (targetUrl: string, customHeaders?: Record<string, 
       if (finished) return;
       try {
         const rawContent = await hiddenWin.webContents.executeJavaScript(
-          `document.body ? (document.body.innerText || document.documentElement.outerHTML) : document.documentElement.outerHTML`
+          `(() => {
+            const pre = document.querySelector('pre');
+            if (pre && pre.textContent && (pre.textContent.trim().startsWith('<?xml') || pre.textContent.trim().startsWith('<'))) {
+              return pre.textContent;
+            }
+            if (document.body && document.body.innerText && (document.body.innerText.trim().startsWith('<?xml') || document.body.innerText.trim().startsWith('<'))) {
+              return document.body.innerText;
+            }
+            return document.documentElement ? document.documentElement.outerHTML : '';
+          })()`
         );
         finished = true;
         cleanup();

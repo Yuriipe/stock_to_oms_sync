@@ -461,6 +461,7 @@ function loadProfileMapping(profileId) {
   document.getElementById('map-price-path').value = p.mapping.pricePath || '';
   document.getElementById('map-stock-path').value = p.mapping.stockPath || '';
   document.getElementById('map-name-path').value = p.mapping.namePath || '';
+  document.getElementById('map-image-path').value = p.mapping.imagePath || '';
 }
 
 window.goToMapper = function(profileId) {
@@ -506,6 +507,7 @@ window.copyTagToActive = function(prop) {
   else if (lower.includes('stock') || lower.includes('qty') || lower.includes('quantity') || lower.includes('stan') || lower.includes('ilosc')) document.getElementById('map-stock-path').value = prop;
   else if (lower.includes('sku') || lower.includes('code') || lower.includes('kod')) document.getElementById('map-sku-path').value = prop;
   else if (lower.includes('ean') || lower.includes('barcode')) document.getElementById('map-ean-path').value = prop;
+  else if (lower.includes('image') || lower.includes('zdjecie') || lower.includes('photo') || lower.includes('picture') || lower.includes('img')) document.getElementById('map-image-path').value = prop;
   else if (lower.includes('name') || lower.includes('title') || lower.includes('nazwa')) document.getElementById('map-name-path').value = prop;
 };
 
@@ -522,7 +524,8 @@ document.getElementById('btn-preview-mapping').addEventListener('click', async (
     eanPath: document.getElementById('map-ean-path').value.trim(),
     pricePath: document.getElementById('map-price-path').value.trim(),
     stockPath: document.getElementById('map-stock-path').value.trim(),
-    namePath: document.getElementById('map-name-path').value.trim() || undefined
+    namePath: document.getElementById('map-name-path').value.trim() || undefined,
+    imagePath: document.getElementById('map-image-path').value.trim() || undefined
   };
 
   try {
@@ -547,6 +550,7 @@ document.getElementById('btn-preview-mapping').addEventListener('click', async (
         <td>${item.price}</td>
         <td>${item.stock}</td>
         <td>${item.name || '-'}</td>
+        <td>${item.imageUrl ? `<a href="${item.imageUrl}" target="_blank" rel="noopener" style="color: var(--primary); text-decoration: underline;">URL zdjęcia</a>` : '-'}</td>
       </tr>
     `).join('');
   } catch (e) {
@@ -568,7 +572,8 @@ document.getElementById('btn-save-mapping').addEventListener('click', async () =
     eanPath: document.getElementById('map-ean-path').value.trim(),
     pricePath: document.getElementById('map-price-path').value.trim(),
     stockPath: document.getElementById('map-stock-path').value.trim(),
-    namePath: document.getElementById('map-name-path').value.trim() || undefined
+    namePath: document.getElementById('map-name-path').value.trim() || undefined,
+    imagePath: document.getElementById('map-image-path').value.trim() || undefined
   };
 
   try {

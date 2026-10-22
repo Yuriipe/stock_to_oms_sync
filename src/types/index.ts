@@ -6,6 +6,7 @@ export interface XmlFieldMapping {
   pricePath: string;
   stockPath: string;
   namePath?: string;
+  imagePath?: string;
 }
 
 export interface FeedProfile {

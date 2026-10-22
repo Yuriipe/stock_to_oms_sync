@@ -78,12 +78,19 @@ export class DatabaseManager {
         productId INTEGER NOT NULL,
         sku TEXT,
         ean TEXT,
+        hasImages INTEGER NOT NULL DEFAULT 0,
         updatedAt TEXT NOT NULL,
         PRIMARY KEY (inventoryId, productId)
       );
       CREATE INDEX IF NOT EXISTS idx_bl_sku ON baselinker_products(inventoryId, sku);
       CREATE INDEX IF NOT EXISTS idx_bl_ean ON baselinker_products(inventoryId, ean);
     `);
+
+    try {
+      this.db.exec(`ALTER TABLE baselinker_products ADD COLUMN hasImages INTEGER NOT NULL DEFAULT 0`);
+    } catch {
+      // Column may already exist
+    }
 
     // Sync Cache Table (Stores last known state per profile and identifier)
     this.db.exec(`
@@ -385,21 +392,67 @@ export class DatabaseManager {
     return map;
   }
 
-  public upsertBaseProducts(inventoryId: number, products: Array<{ productId: number; sku?: string; ean?: string }>): void {
+  public getBaseProductsInfoMultiMap(
+    inventoryId: number,
+    identifierField: 'sku' | 'ean'
+  ): Map<string, Array<{ productId: number; hasImages: boolean }>> {
+    const field = identifierField === 'sku' ? 'sku' : 'ean';
+    const rows = this.db.prepare(`
+      SELECT productId, ${field} as identifier, hasImages
+      FROM baselinker_products
+      WHERE inventoryId = ? AND ${field} IS NOT NULL AND ${field} != ''
+    `).all(inventoryId) as Array<{ productId: number; identifier: string; hasImages: number }>;
+
+    const map = new Map<string, Array<{ productId: number; hasImages: boolean }>>();
+    for (const r of rows) {
+      if (r.identifier) {
+        const key = r.identifier.trim();
+        const existing = map.get(key);
+        const item = { productId: r.productId, hasImages: Boolean(r.hasImages) };
+        if (existing) {
+          existing.push(item);
+        } else {
+          map.set(key, [item]);
+        }
+      }
+    }
+    return map;
+  }
+
+  public markProductHasImages(inventoryId: number, productId: number, hasImages: boolean = true): void {
+    this.db.prepare(`
+      UPDATE baselinker_products
+      SET hasImages = ?
+      WHERE inventoryId = ? AND productId = ?
+    `).run(hasImages ? 1 : 0, inventoryId, productId);
+  }
+
+  public upsertBaseProducts(
+    inventoryId: number,
+    products: Array<{ productId: number; sku?: string; ean?: string; hasImages?: boolean }>
+  ): void {
     if (products.length === 0) return;
     const now = new Date().toISOString();
     const insert = this.db.prepare(`
-      INSERT INTO baselinker_products (inventoryId, productId, sku, ean, updatedAt)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO baselinker_products (inventoryId, productId, sku, ean, hasImages, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(inventoryId, productId) DO UPDATE SET
         sku = excluded.sku,
         ean = excluded.ean,
+        hasImages = CASE WHEN excluded.hasImages = 1 THEN 1 ELSE baselinker_products.hasImages END,
         updatedAt = excluded.updatedAt
     `);
 
-    const insertMany = this.db.transaction((items: Array<{ productId: number; sku?: string; ean?: string }>) => {
+    const insertMany = this.db.transaction((items: Array<{ productId: number; sku?: string; ean?: string; hasImages?: boolean }>) => {
       for (const item of items) {
-        insert.run(inventoryId, item.productId, item.sku || null, item.ean || null, now);
+        insert.run(
+          inventoryId,
+          item.productId,
+          item.sku || null,
+          item.ean || null,
+          item.hasImages ? 1 : 0,
+          now
+        );
       }
     });
 
@@ -491,11 +544,11 @@ export class DatabaseManager {
     return res.changes;
   }
 
-  public saveSingleBaseProduct(inventoryId: number, productId: number, sku?: string, ean?: string): void {
+  public saveSingleBaseProduct(inventoryId: number, productId: number, sku?: string, ean?: string, hasImages?: boolean): void {
     if ((!sku || sku.trim() === '') && (!ean || ean.trim() === '')) {
       return;
     }
-    this.upsertBaseProducts(inventoryId, [{ productId, sku: sku?.trim(), ean: ean?.trim() }]);
+    this.upsertBaseProducts(inventoryId, [{ productId, sku: sku?.trim(), ean: ean?.trim(), hasImages }]);
   }
 
   public getBaseProductsList(inventoryId: number, limit: number = 100, offset: number = 0): { total: number; products: Array<{ productId: number; sku?: string; ean?: string; updatedAt: string }> } {

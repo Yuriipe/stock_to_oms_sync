@@ -9,6 +9,7 @@ export interface SupplierParsedItem {
   price: number;
   stock: number;
   name?: string;
+  imageUrl?: string;
 }
 
 export interface XmlStructureCandidates {
@@ -44,6 +45,36 @@ export class XmlParserService {
     }
 
     if (current === undefined || current === null) return undefined;
+    return String(current).trim();
+  }
+
+  /**
+   * Resolves path returning the first string if target is an array or object
+   */
+  private resolvePathFirst(obj: unknown, path: string): string | undefined {
+    if (!obj || !path) return undefined;
+    const parts = path.split('.');
+    let current: unknown = obj;
+
+    for (const part of parts) {
+      if (current === null || current === undefined || typeof current !== 'object') {
+        return undefined;
+      }
+      const record = current as Record<string, unknown>;
+      current = record[part];
+      if (Array.isArray(current) && current.length > 0) {
+        current = current[0];
+      }
+    }
+
+    if (current === undefined || current === null) return undefined;
+    if (typeof current === 'object') {
+      const vals = Object.values(current as Record<string, unknown>);
+      if (vals.length > 0 && vals[0] !== undefined && vals[0] !== null) {
+        return String(vals[0]).trim();
+      }
+      return undefined;
+    }
     return String(current).trim();
   }
 
@@ -171,6 +202,33 @@ export class XmlParserService {
         continue; // Skip items missing designated identifier
       }
 
+      let imageUrl = mapping.imagePath ? this.resolvePathFirst(node, mapping.imagePath) : undefined;
+      if (!imageUrl) {
+        for (const candidate of [
+          'image',
+          'images',
+          'zdjecie',
+          'zdjecia',
+          'photo',
+          'photos',
+          'image_url',
+          'img',
+          'imgs',
+          'picture',
+          'pictures',
+          'main_image',
+          'images.image',
+          'images.url',
+          'zdjecia.zdjecie'
+        ]) {
+          const val = this.resolvePathFirst(node, candidate);
+          if (val && typeof val === 'string' && (val.startsWith('http://') || val.startsWith('https://') || val.includes('/'))) {
+            imageUrl = val;
+            break;
+          }
+        }
+      }
+
       items.push({
         identifier,
         identifierField: mapping.identifierField,
@@ -178,7 +236,8 @@ export class XmlParserService {
         ean: ean || undefined,
         price: isNaN(price) ? 0 : price,
         stock: isNaN(stock) ? 0 : stock,
-        name: name || undefined
+        name: name || undefined,
+        imageUrl: imageUrl || undefined
       });
     }
 
@@ -238,7 +297,9 @@ export class XmlParserService {
         for (const [k, v] of Object.entries(curr as Record<string, unknown>)) {
           const path = prefix ? `${prefix}.${k}` : k;
           sampleProps.push(path);
-          if (v && typeof v === 'object' && !Array.isArray(v)) {
+          if (Array.isArray(v) && v.length > 0 && typeof v[0] === 'object') {
+            extractKeys(v[0], path);
+          } else if (v && typeof v === 'object' && !Array.isArray(v)) {
             extractKeys(v, path);
           }
         }

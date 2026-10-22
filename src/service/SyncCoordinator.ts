@@ -96,12 +96,14 @@ export class SyncCoordinator {
       this.db.deleteEmptyBaseProducts(profile.targetInventoryId);
 
       let blProductMultiMap = this.db.getBaseProductsMultiMap(profile.targetInventoryId, profile.identifierField);
+      let blProductInfoMultiMap = this.db.getBaseProductsInfoMultiMap(profile.targetInventoryId, profile.identifierField);
 
-      // 4. Auto-create products in BaseLinker if XML contains products that Base does not contain
+      // 4. Auto-create products in BaseLinker or update images if product already exists without images
       let createdCount = 0;
+      let imagesUpdatedCount = 0;
       for (const item of items) {
-        const existingBlIds = blProductMultiMap.get(item.identifier);
-        if (!existingBlIds || existingBlIds.length === 0) {
+        const existingInfos = blProductInfoMultiMap.get(item.identifier);
+        if (!existingInfos || existingInfos.length === 0) {
           try {
             const formattedWh = /^\d+$/.test(profile.targetWarehouseId)
               ? `bl_${profile.targetWarehouseId}`
@@ -114,12 +116,17 @@ export class SyncCoordinator {
               prices?: Record<number | string, number>;
               stock?: Record<string, number>;
               name?: string;
+              images?: string[];
             } = {
               inventory_id: profile.targetInventoryId,
               sku: item.sku || (profile.identifierField === 'sku' ? item.identifier : undefined),
               ean: item.ean || (profile.identifierField === 'ean' ? item.identifier : undefined),
               name: item.name || item.sku || item.identifier || `Product ${item.identifier}`
             };
+
+            if (item.imageUrl) {
+              addParams.images = [item.imageUrl];
+            }
 
             // Always assign price if target price group is configured (lack of price must never block creation)
             if (profile.targetPriceGroupId) {
@@ -135,17 +142,39 @@ export class SyncCoordinator {
 
             if (newBlId) {
               blProductMultiMap.set(item.identifier, [newBlId]);
+              blProductInfoMultiMap.set(item.identifier, [{ productId: newBlId, hasImages: Boolean(item.imageUrl) }]);
               this.db.saveSingleBaseProduct(
                 profile.targetInventoryId,
                 newBlId,
                 addParams.sku,
-                addParams.ean
+                addParams.ean,
+                Boolean(item.imageUrl)
               );
               this.db.updateCacheEntry(profile.id, item.identifier, item.price, item.stock);
               createdCount++;
             }
           } catch (createErr) {
             console.error(`Failed to create product ${item.identifier} in BaseLinker:`, createErr);
+          }
+        } else if (item.imageUrl) {
+          // Product already exists in BaseLinker catalog - check if any instance lacks images
+          for (const info of existingInfos) {
+            if (!info.hasImages) {
+              try {
+                const ok = await client.updateInventoryProductImages(
+                  profile.targetInventoryId,
+                  info.productId,
+                  [item.imageUrl]
+                );
+                if (ok) {
+                  info.hasImages = true;
+                  this.db.markProductHasImages(profile.targetInventoryId, info.productId, true);
+                  imagesUpdatedCount++;
+                }
+              } catch (imgErr) {
+                console.error(`Failed to update image for product ${info.productId}:`, imgErr);
+              }
+            }
           }
         }
       }
@@ -206,6 +235,9 @@ export class SyncCoordinator {
       let successMsg = `Synced ${items.length} items. Updated ${pricesUpdatedCount} prices, ${stocksUpdatedCount} stock levels.`;
       if (createdCount > 0) {
         successMsg += ` Created ${createdCount} new items in BaseLinker.`;
+      }
+      if (imagesUpdatedCount > 0) {
+        successMsg += ` Added images to ${imagesUpdatedCount} existing items.`;
       }
       this.logAndSaveStatus(profile, 'success', items.length, pricesUpdatedCount, stocksUpdatedCount, successMsg);
 

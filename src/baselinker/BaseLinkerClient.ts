@@ -266,6 +266,7 @@ export class BaseLinkerClient {
     prices?: Record<number | string, number>;
     stock?: Record<string, number>;
     name?: string;
+    images?: string[];
   }): Promise<number> {
     const reqParameters: Record<string, unknown> = {
       inventory_id: params.inventory_id,
@@ -284,11 +285,46 @@ export class BaseLinkerClient {
       reqParameters.stock = params.stock;
     }
 
+    if (params.images && params.images.length > 0) {
+      const imagesPayload: Record<string, string> = {};
+      params.images.slice(0, 16).forEach((url, idx) => {
+        imagesPayload[String(idx)] = url.startsWith('url:') ? url : `url:${url}`;
+      });
+      reqParameters.images = imagesPayload;
+    }
+
     const res = await this.request<{ status: string; product_id: number }>(
       'addInventoryProduct',
       reqParameters
     );
 
     return res.product_id;
+  }
+
+  /**
+   * Updates images for an existing product in BaseLinker catalog
+   */
+  public async updateInventoryProductImages(
+    inventoryId: number,
+    productId: number,
+    imageUrls: string[]
+  ): Promise<boolean> {
+    if (!imageUrls || imageUrls.length === 0) return false;
+
+    const imagesPayload: Record<string, string> = {};
+    imageUrls.slice(0, 16).forEach((url, idx) => {
+      imagesPayload[String(idx)] = url.startsWith('url:') ? url : `url:${url}`;
+    });
+
+    const res = await this.request<{ status: string }>(
+      'addInventoryProduct',
+      {
+        inventory_id: inventoryId,
+        product_id: productId,
+        images: imagesPayload
+      }
+    );
+
+    return res.status === 'SUCCESS';
   }
 }

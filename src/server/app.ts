@@ -154,9 +154,24 @@ export function createApiServer(
         return res.status(400).json({ error: 'No XML content or valid source provided' });
       }
 
-      // Sample first 1MB if huge
-      const snippet = xmlContent.slice(0, 1024 * 1024);
-      const candidates = xmlParser.inspectStructure(snippet);
+      // Safely slice XML snippet for fast inspection
+      let snippet = xmlContent;
+      if (snippet.length > 1024 * 1024) {
+        snippet = snippet.slice(0, 1024 * 1024);
+        const lastLt = snippet.lastIndexOf('<');
+        const lastGt = snippet.lastIndexOf('>');
+        if (lastLt > lastGt) {
+          snippet = snippet.slice(0, lastLt);
+        }
+      }
+
+      let candidates;
+      try {
+        candidates = xmlParser.inspectStructure(snippet);
+      } catch (parseErr) {
+        // If truncated snippet caused a syntax issue (e.g., closing tag cut off), retry with full xmlContent
+        candidates = xmlParser.inspectStructure(xmlContent);
+      }
 
       res.json({ success: true, ...candidates });
     } catch (e: unknown) {
@@ -183,7 +198,24 @@ export function createApiServer(
         return res.status(400).json({ error: 'XML content and mapping required' });
       }
 
-      const items = xmlParser.parseXml(xmlContent.slice(0, 1024 * 1024), mapping);
+      let snippet = xmlContent;
+      if (snippet.length > 1024 * 1024) {
+        snippet = snippet.slice(0, 1024 * 1024);
+        const lastLt = snippet.lastIndexOf('<');
+        const lastGt = snippet.lastIndexOf('>');
+        if (lastLt > lastGt) {
+          snippet = snippet.slice(0, lastLt);
+        }
+      }
+
+      let items;
+      try {
+        items = xmlParser.parseXml(snippet, mapping);
+      } catch (parseErr) {
+        // Fallback to full xmlContent if truncated slice caused closing tag mismatch
+        items = xmlParser.parseXml(xmlContent, mapping);
+      }
+
       res.json({ success: true, sampleCount: items.length, sampleItems: items.slice(0, 10) });
     } catch (e: unknown) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });

@@ -166,4 +166,34 @@ describe('XmlParserService with Dynamic Mapping', () => {
     expect(items[1].price).toBe(0);
     expect(items[1].stock).toBe(5);
   });
+
+  it('should parse product images using imagePath or auto-detect image URL', async () => {
+    const xml = `
+      <catalogue>
+        <item>
+          <sku>IMG-01</sku>
+          <price>49.90</price>
+          <qty>12</qty>
+          <images>
+            <image>https://example.com/photos/item1.jpg</image>
+            <image>https://example.com/photos/item1_side.jpg</image>
+          </images>
+        </item>
+      </catalogue>
+    `;
+
+    const items = await service.parseXml(xml, {
+      itemTag: 'item',
+      identifierField: 'sku',
+      skuPath: 'sku',
+      eanPath: '',
+      pricePath: 'price',
+      stockPath: 'qty',
+      imagePath: 'images.image'
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0].sku).toBe('IMG-01');
+    expect(items[0].imageUrl).toBe('https://example.com/photos/item1.jpg');
+  });
 });
