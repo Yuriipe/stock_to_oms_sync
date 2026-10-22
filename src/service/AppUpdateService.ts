@@ -4,6 +4,32 @@ import path from 'path';
 
 const execAsync = promisify(exec);
 
+/**
+ * Returns environment variables with guaranteed Windows system variables (ComSpec, SystemRoot, PATH)
+ */
+function getExecEnv(extraEnv?: Record<string, string>): NodeJS.ProcessEnv {
+  const baseEnv: NodeJS.ProcessEnv = { ...process.env, ...extraEnv };
+  if (process.platform === 'win32') {
+    const systemRoot = process.env.SystemRoot || process.env.SYSTEMROOT || 'C:\\Windows';
+    const comSpec = process.env.ComSpec || process.env.COMSPEC || `${systemRoot}\\System32\\cmd.exe`;
+    baseEnv.SystemRoot = systemRoot;
+    baseEnv.ComSpec = comSpec;
+
+    // Ensure system directories and Git are on PATH if missing
+    const currentPath = baseEnv.PATH || baseEnv.Path || '';
+    const systemPaths = [
+      `${systemRoot}\\System32`,
+      systemRoot,
+      `${systemRoot}\\System32\\Wbem`,
+      `${systemRoot}\\System32\\WindowsPowerShell\\v1.0\\`,
+      'C:\\Program Files\\Git\\cmd',
+      'C:\\Program Files\\nodejs'
+    ];
+    baseEnv.PATH = `${currentPath};${systemPaths.join(';')}`;
+  }
+  return baseEnv;
+}
+
 export interface UpdateStatus {
   currentCommit: string;
   currentShortCommit: string;
@@ -56,9 +82,12 @@ export class AppUpdateService {
    */
   public async checkForUpdates(options?: { token?: string; repoUrl?: string }): Promise<UpdateStatus> {
     try {
+      const execEnv = getExecEnv({ GIT_TERMINAL_PROMPT: '0' });
+
       // 1. Get current branch
       const { stdout: branchOut } = await execAsync('git rev-parse --abbrev-ref HEAD', {
-        cwd: this.repoDir
+        cwd: this.repoDir,
+        env: execEnv
       });
       const branch = branchOut.trim() || 'main';
 
@@ -66,24 +95,28 @@ export class AppUpdateService {
       const fetchTarget = this.buildRemoteTarget(branch, options?.token, options?.repoUrl);
       await execAsync(`git fetch ${fetchTarget}`, {
         cwd: this.repoDir,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        env: execEnv,
         timeout: 25000
       });
 
       // 3. Local commit hash
-      const { stdout: localOut } = await execAsync('git rev-parse HEAD', { cwd: this.repoDir });
+      const { stdout: localOut } = await execAsync('git rev-parse HEAD', {
+        cwd: this.repoDir,
+        env: execEnv
+      });
       const currentCommit = localOut.trim();
 
       // 4. Remote commit hash (FETCH_HEAD is always updated by git fetch)
       const { stdout: remoteOut } = await execAsync(`git rev-parse FETCH_HEAD`, {
-        cwd: this.repoDir
+        cwd: this.repoDir,
+        env: execEnv
       });
       const remoteCommit = remoteOut.trim();
 
       // 5. Commits behind count
       const { stdout: countOut } = await execAsync(
         `git rev-list --count HEAD..FETCH_HEAD`,
-        { cwd: this.repoDir }
+        { cwd: this.repoDir, env: execEnv }
       );
       const commitsBehind = parseInt(countOut.trim(), 10) || 0;
 
@@ -92,7 +125,7 @@ export class AppUpdateService {
       if (commitsBehind > 0) {
         const { stdout: logOut } = await execAsync(
           `git log HEAD..FETCH_HEAD --oneline -n 10`,
-          { cwd: this.repoDir }
+          { cwd: this.repoDir, env: execEnv }
         );
         commitMessages = logOut
           .split('\n')
@@ -116,6 +149,12 @@ export class AppUpdateService {
       if (errMsg.includes('could not read Username') || errMsg.includes('Authentication failed')) {
         throw new Error('Authentication required for private repository. Please configure a GitHub Personal Access Token in Settings.');
       }
+      if (errMsg.includes('ENOENT') && errMsg.includes('cmd.exe')) {
+        throw new Error('System command interpreter (cmd.exe) could not be found or executed. Verify Windows System32 permissions.');
+      }
+      if (errMsg.includes('ENOENT') || errMsg.includes('git is not recognized') || errMsg.includes('not found')) {
+        throw new Error('Git was not found on this system. Please install Git for Windows (https://git-scm.com) and ensure it is in the system PATH.');
+      }
       throw new Error(`Failed to check for updates: ${errMsg}`);
     }
   }
@@ -125,29 +164,39 @@ export class AppUpdateService {
    */
   public async applyUpdate(options?: { token?: string; repoUrl?: string }): Promise<UpdateApplyResult> {
     try {
+      const execEnv = getExecEnv({ GIT_TERMINAL_PROMPT: '0' });
+
       const { stdout: branchOut } = await execAsync('git rev-parse --abbrev-ref HEAD', {
-        cwd: this.repoDir
+        cwd: this.repoDir,
+        env: execEnv
       });
       const branch = branchOut.trim() || 'main';
 
-      const { stdout: prevOut } = await execAsync('git rev-parse HEAD', { cwd: this.repoDir });
+      const { stdout: prevOut } = await execAsync('git rev-parse HEAD', {
+        cwd: this.repoDir,
+        env: execEnv
+      });
       const previousCommit = prevOut.trim();
 
       // Pull updates (authenticated if token provided)
       const pullTarget = this.buildRemoteTarget(branch, options?.token, options?.repoUrl);
       await execAsync(`git pull ${pullTarget}`, {
         cwd: this.repoDir,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        env: execEnv,
         timeout: 45000
       });
 
       // Recompile TypeScript
       await execAsync('npm run build', {
         cwd: this.repoDir,
+        env: execEnv,
         timeout: 60000
       });
 
-      const { stdout: newOut } = await execAsync('git rev-parse HEAD', { cwd: this.repoDir });
+      const { stdout: newOut } = await execAsync('git rev-parse HEAD', {
+        cwd: this.repoDir,
+        env: execEnv
+      });
       const newCommit = newOut.trim();
 
       return {

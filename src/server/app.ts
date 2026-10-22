@@ -141,7 +141,11 @@ export function createApiServer(
       let xmlContent = sampleXml;
 
       if (!xmlContent && sourceType === 'url' && sourcePath) {
-        const headers: Record<string, string> = {};
+        const headers: Record<string, string> = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9,pl;q=0.8'
+        };
         if (authHeader) headers['Authorization'] = authHeader;
         const response = await axios.get(sourcePath, { headers, timeout: 20000, responseType: 'text' });
         xmlContent = response.data;
@@ -174,7 +178,11 @@ export function createApiServer(
       let xmlContent = sampleXml;
 
       if (!xmlContent && sourceType === 'url' && sourcePath) {
-        const headers: Record<string, string> = {};
+        const headers: Record<string, string> = {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9,pl;q=0.8'
+        };
         if (authHeader) headers['Authorization'] = authHeader;
         const response = await axios.get(sourcePath, { headers, timeout: 20000, responseType: 'text' });
         xmlContent = response.data;
