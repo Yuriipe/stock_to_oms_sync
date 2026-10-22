@@ -89,44 +89,70 @@ export class SyncCoordinator {
       }
 
       // 3. Match against BaseLinker product IDs using local DB cache
-      // Check if we already have cached products for targetInventoryId in SQLite
-      const cachedCount = this.db.getBaseProductsCount(profile.targetInventoryId);
-      if (cachedCount === 0) {
+      // Reconcile with BaseLinker to ensure products deleted in Base are removed and new ones discovered
+      try {
         const fetchedProducts = await client.fetchAllInventoryProducts(profile.targetInventoryId);
-        if (fetchedProducts.length > 0) {
-          this.db.upsertBaseProducts(profile.targetInventoryId, fetchedProducts);
+        this.db.syncBaseProducts(profile.targetInventoryId, fetchedProducts);
+      } catch (fetchErr) {
+        console.warn(
+          `Could not refresh BaseLinker products for inventory ${profile.targetInventoryId}, falling back to local cache:`,
+          fetchErr
+        );
+        if (this.db.getBaseProductsCount(profile.targetInventoryId) === 0) {
+          throw fetchErr;
         }
       }
 
+      // Clean up any remaining rows that contain nothing except ID (missing both SKU and EAN)
+      this.db.deleteEmptyBaseProducts(profile.targetInventoryId);
+
       let blProductMultiMap = this.db.getBaseProductsMultiMap(profile.targetInventoryId, profile.identifierField);
 
-      // 4. Auto-create products in BaseLinker if missing, stock > 0, and price > 0
+      // 4. Auto-create products in BaseLinker if XML contains products that Base does not contain
       let createdCount = 0;
       for (const item of items) {
         const existingBlIds = blProductMultiMap.get(item.identifier);
-        if ((!existingBlIds || existingBlIds.length === 0) && item.stock > 0 && item.price > 0) {
+        if (!existingBlIds || existingBlIds.length === 0) {
           try {
             const formattedWh = /^\d+$/.test(profile.targetWarehouseId)
               ? `bl_${profile.targetWarehouseId}`
               : profile.targetWarehouseId;
 
-            const newBlId = await client.addInventoryProduct({
+            const addParams: {
+              inventory_id: number;
+              sku?: string;
+              ean?: string;
+              prices?: Record<number | string, number>;
+              stock?: Record<string, number>;
+              name?: string;
+            } = {
               inventory_id: profile.targetInventoryId,
               sku: item.sku || (profile.identifierField === 'sku' ? item.identifier : undefined),
               ean: item.ean || (profile.identifierField === 'ean' ? item.identifier : undefined),
-              prices: { [profile.targetPriceGroupId]: item.price },
-              stock: { [formattedWh]: item.stock },
-              name: item.name || item.sku || item.identifier
-            });
+              name: item.name || item.sku || item.identifier || `Product ${item.identifier}`
+            };
+
+            // Always assign price if target price group is configured (lack of price must never block creation)
+            if (profile.targetPriceGroupId) {
+              const productPrice = (item.price !== undefined && !isNaN(item.price)) ? item.price : 0;
+              addParams.prices = { [profile.targetPriceGroupId]: productPrice };
+            }
+
+            // Always assign stock for the target warehouse (even if 0)
+            const productStock = (item.stock !== undefined && !isNaN(item.stock)) ? Math.max(0, item.stock) : 0;
+            addParams.stock = { [formattedWh]: productStock };
+
+            const newBlId = await client.addInventoryProduct(addParams);
 
             if (newBlId) {
               blProductMultiMap.set(item.identifier, [newBlId]);
               this.db.saveSingleBaseProduct(
                 profile.targetInventoryId,
                 newBlId,
-                item.sku || (profile.identifierField === 'sku' ? item.identifier : undefined),
-                item.ean || (profile.identifierField === 'ean' ? item.identifier : undefined)
+                addParams.sku,
+                addParams.ean
               );
+              this.db.updateCacheEntry(profile.id, item.identifier, item.price, item.stock);
               createdCount++;
             }
           } catch (createErr) {
@@ -165,7 +191,11 @@ export class SyncCoordinator {
         pricesUpdatedCount = await client.updateInventoryProductsPrices(
           profile.targetInventoryId,
           pricesToUpdate,
-          profile.targetPriceGroupId
+          profile.targetPriceGroupId,
+          (missingBlId) => {
+            console.warn(`Product ${missingBlId} not found in BaseLinker; deleting from local table.`);
+            this.db.deleteBaseProduct(profile.targetInventoryId, missingBlId);
+          }
         );
       }
 
@@ -173,7 +203,11 @@ export class SyncCoordinator {
         stocksUpdatedCount = await client.updateInventoryProductsStock(
           profile.targetInventoryId,
           stocksToUpdate,
-          profile.targetWarehouseId
+          profile.targetWarehouseId,
+          (missingBlId) => {
+            console.warn(`Product ${missingBlId} not found in BaseLinker; deleting from local table.`);
+            this.db.deleteBaseProduct(profile.targetInventoryId, missingBlId);
+          }
         );
       }
 
@@ -217,7 +251,9 @@ export class SyncCoordinator {
     message: string
   ): void {
     const timestamp = new Date().toISOString();
-    profile.lastSyncAt = timestamp;
+    if (status === 'success') {
+      profile.lastSyncAt = timestamp;
+    }
     profile.lastSyncStatus = status;
     profile.lastSyncMessage = message;
     this.db.saveProfile(profile);

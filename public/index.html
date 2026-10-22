@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Boltline Base XML Sync</title>
+  <title>XMLsync - Synchronizacja BaseLinker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -11,109 +11,112 @@
 </head>
 <body>
   <div class="app-layout">
-    <!-- Sidebar -->
+    <!-- Pasek boczny / Sidebar -->
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-logo">⚡</div>
         <div class="brand-text">
-          <h2>Boltline XML</h2>
-          <span>BaseLinker Automator</span>
+          <h2>XMLsync</h2>
+          <span>Automatyzacja BaseLinker</span>
         </div>
       </div>
 
       <nav class="nav-menu">
         <button class="nav-item active" data-tab="dashboard">
-          <span class="icon">📊</span> Profiles & Sync
+          <span class="icon">📊</span> Profile i synchronizacja
         </button>
         <button class="nav-item" data-tab="mapper">
-          <span class="icon">🧩</span> XML Field Mapper
+          <span class="icon">🧩</span> Mapowanie pól XML
         </button>
         <button class="nav-item" data-tab="settings">
-          <span class="icon">⚙️</span> BaseLinker & System
+          <span class="icon">⚙️</span> BaseLinker i system
         </button>
         <button class="nav-item" data-tab="logs">
-          <span class="icon">📋</span> Activity Logs
+          <span class="icon">📋</span> Dziennik zdarzeń
+        </button>
+        <button class="nav-item" data-tab="manual">
+          <span class="icon">📖</span> Instrukcja obsługi
         </button>
       </nav>
 
       <div class="system-status-box">
         <div class="status-indicator">
           <span class="status-dot"></span>
-          <span id="service-status">Engine Running</span>
+          <span id="service-status">Silnik aktywny</span>
         </div>
         <div class="app-version-box">
-          <span class="commit-pill" id="app-commit-badge">Commit: loading...</span>
-          <span class="update-badge" id="app-update-badge" style="display:none;">Update Available</span>
+          <span class="commit-pill" id="app-commit-badge">Wersja: ładowanie...</span>
+          <span class="update-badge" id="app-update-badge" style="display:none;">Dostępna aktualizacja</span>
         </div>
-        <div class="tray-tip">Minimizes to Windows Tray</div>
+        <div class="tray-tip">Działa w zasobniku Windows</div>
       </div>
     </aside>
 
-    <!-- Main Content Area -->
+    <!-- Główny obszar roboczy / Main Content -->
     <main class="main-content">
-      <!-- Update Alert Banner -->
+      <!-- Baner informujący o dostępnej aktualizacji -->
       <div id="update-banner" class="update-alert-banner" style="display:none;">
         <div class="update-banner-content">
           <span class="icon">🚀</span>
           <div class="update-banner-text">
-            <strong>Application Update Available!</strong>
-            <span id="update-banner-desc">New code changes are available from remote repository.</span>
+            <strong>Dostępna aktualizacja aplikacji!</strong>
+            <span id="update-banner-desc">W repozytorium zdalnym dostępne są nowe zmiany w kodzie.</span>
           </div>
         </div>
         <div class="update-banner-actions">
-          <button id="btn-banner-update" class="btn btn-sm btn-primary">⚡ Update Now</button>
-          <button id="btn-banner-dismiss" class="btn btn-sm btn-outline">Dismiss</button>
+          <button id="btn-banner-update" class="btn btn-sm btn-primary">⚡ Zaktualizuj teraz</button>
+          <button id="btn-banner-dismiss" class="btn btn-sm btn-outline">Odrzuć</button>
         </div>
       </div>
 
-      <!-- Top Bar -->
+      <!-- Górny pasek / Top Bar -->
       <header class="topbar">
-        <h1 id="page-title">Feed Profiles & Sync Status</h1>
+        <h1 id="page-title">Profile plików i status synchronizacji</h1>
         <div class="topbar-actions">
-          <button id="btn-check-updates" class="btn btn-outline" title="Check GitHub for application updates">
-            <span class="icon">🔄</span> Check for Updates
+          <button id="btn-check-updates" class="btn btn-outline" title="Sprawdź dostępność aktualizacji na GitHub">
+            <span class="icon">🔄</span> Sprawdź aktualizacje
           </button>
           <button id="btn-sync-all" class="btn btn-primary">
-            <span class="icon">⚡</span> Sync All Active Feeds
+            <span class="icon">⚡</span> Synchronizuj wszystkie
           </button>
           <button id="btn-add-profile" class="btn btn-secondary">
-            + Add Feed Profile
+            + Dodaj profil pliku
           </button>
         </div>
       </header>
 
-      <!-- TAB: DASHBOARD / PROFILES -->
+      <!-- ZAKŁADKA 1: PROFILE I SYNCHRONIZACJA (DASHBOARD) -->
       <section id="tab-dashboard" class="tab-pane active">
         <div class="profiles-grid" id="profiles-list">
-          <!-- Dynamically populated profiles -->
+          <!-- Profile generowane dynamicznie przez JavaScript -->
         </div>
       </section>
 
-      <!-- TAB: XML FIELD MAPPER -->
+      <!-- ZAKŁADKA 2: MAPOWANIE PÓL XML (MAPPER) -->
       <section id="tab-mapper" class="tab-pane">
         <div class="panel">
           <div class="panel-header">
-            <h3>Visual XML Field Mapper & Live Inspector</h3>
-            <p>Paste a snippet of XML or provide a URL/file path to auto-detect tag names and map them to BaseLinker fields.</p>
+            <h3>Wizualne mapowanie pól XML i podgląd na żywo</h3>
+            <p>Wklej fragment pliku XML lub podaj adres URL / plik lokalny, aby automatycznie wykryć tagi i przypisać je do pól BaseLinkera.</p>
           </div>
           <div class="mapper-grid">
             <div class="mapper-left">
               <div class="form-group">
-                <label>Select Profile to Edit Mapping</label>
+                <label>Wybierz profil do edycji mapowania</label>
                 <select id="mapper-profile-select" class="input-field"></select>
               </div>
 
               <div class="form-group">
-                <label>Sample XML Source</label>
-                <textarea id="sample-xml-input" class="code-area" placeholder="Paste sample XML here (or leave empty to fetch from profile source)..."></textarea>
+                <label>Przykładowy kod XML</label>
+                <textarea id="sample-xml-input" class="code-area" placeholder="Wklej tutaj przykładowy kod XML (lub pozostaw puste, aby pobrać bezpośrednio ze źródła profilu)..."></textarea>
               </div>
 
               <button id="btn-inspect-xml" class="btn btn-secondary">
-                🔍 Auto-Detect XML Tags
+                🔍 Automatycznie wykryj tagi XML
               </button>
 
               <div id="detected-tags-box" class="tag-badges-container" style="display:none; margin-top: 15px;">
-                <label>Detected Item Tags:</label>
+                <label>Wykryte tagi produktów:</label>
                 <div id="detected-tags-list" class="badge-row"></div>
               </div>
             </div>
@@ -121,62 +124,62 @@
             <div class="mapper-right">
               <div class="form-row">
                 <div class="form-group col-6">
-                  <label>Item Repeat Tag (e.g. product, item, o)</label>
+                  <label>Główny tag powtarzalny produktu (np. product, item, o)</label>
                   <input type="text" id="map-item-tag" class="input-field" placeholder="product">
                 </div>
                 <div class="form-group col-6">
-                  <label>Match Identifier By</label>
+                  <label>Dopasuj identyfikator według</label>
                   <select id="map-id-field" class="input-field">
-                    <option value="sku">SKU (Default)</option>
-                    <option value="ean">EAN / Barcode</option>
+                    <option value="sku">SKU (Domyślnie)</option>
+                    <option value="ean">EAN / Kod kreskowy</option>
                   </select>
                 </div>
               </div>
 
               <div class="form-row">
                 <div class="form-group col-6">
-                  <label>SKU Path / Tag</label>
-                  <input type="text" id="map-sku-path" class="input-field" placeholder="sku or @_code">
+                  <label>Ścieżka / tag SKU</label>
+                  <input type="text" id="map-sku-path" class="input-field" placeholder="sku lub @_code">
                 </div>
                 <div class="form-group col-6">
-                  <label>EAN Path / Tag</label>
-                  <input type="text" id="map-ean-path" class="input-field" placeholder="ean or barcode">
+                  <label>Ścieżka / tag EAN</label>
+                  <input type="text" id="map-ean-path" class="input-field" placeholder="ean lub barcode">
                 </div>
               </div>
 
               <div class="form-row">
                 <div class="form-group col-6">
-                  <label>Price Path / Tag</label>
-                  <input type="text" id="map-price-path" class="input-field" placeholder="price or price_netto">
+                  <label>Ścieżka / tag Ceny</label>
+                  <input type="text" id="map-price-path" class="input-field" placeholder="price lub price_netto">
                 </div>
                 <div class="form-group col-6">
-                  <label>Stock / Qty Path / Tag</label>
-                  <input type="text" id="map-stock-path" class="input-field" placeholder="qty or stock">
+                  <label>Ścieżka / tag Stanu magazynowego / ilości</label>
+                  <input type="text" id="map-stock-path" class="input-field" placeholder="qty lub stock">
                 </div>
               </div>
 
               <div class="form-group">
-                <label>Product Name Tag (Optional)</label>
-                <input type="text" id="map-name-path" class="input-field" placeholder="name or title">
+                <label>Ścieżka / tag Nazwy produktu (Opcjonalnie)</label>
+                <input type="text" id="map-name-path" class="input-field" placeholder="name lub title">
               </div>
 
               <div class="form-actions">
-                <button id="btn-preview-mapping" class="btn btn-secondary">Preview Parsed Items</button>
-                <button id="btn-save-mapping" class="btn btn-primary">Save Mapping to Profile</button>
+                <button id="btn-preview-mapping" class="btn btn-secondary">Podgląd przetworzonych elementów</button>
+                <button id="btn-save-mapping" class="btn btn-primary">Zapisz mapowanie w profilu</button>
               </div>
 
               <div id="preview-results-box" class="preview-box" style="display:none;">
-                <h4>Mapping Preview Results (<span id="preview-count">0</span> items detected)</h4>
+                <h4>Wyniki podglądu mapowania (wykryto: <span id="preview-count">0</span> pozycji)</h4>
                 <div class="table-scroll">
                   <table class="data-table" id="preview-table">
                     <thead>
                       <tr>
-                        <th>Identifier</th>
+                        <th>Identyfikator</th>
                         <th>SKU</th>
                         <th>EAN</th>
-                        <th>Price</th>
-                        <th>Stock</th>
-                        <th>Name</th>
+                        <th>Cena</th>
+                        <th>Stan magazynowy</th>
+                        <th>Nazwa</th>
                       </tr>
                     </thead>
                     <tbody></tbody>
@@ -188,38 +191,38 @@
         </div>
       </section>
 
-      <!-- TAB: BASELINKER & SYSTEM SETTINGS -->
+      <!-- ZAKŁADKA 3: USTAWIENIA BASELINKER I SYSTEMU (SETTINGS) -->
       <section id="tab-settings" class="tab-pane">
         <div class="panel max-w-700">
           <div class="panel-header">
-            <h3>BaseLinker API Connection</h3>
-            <p>Connect your local app with your BaseLinker token to discover inventories, warehouses, and price groups dynamically.</p>
+            <h3>Połączenie API BaseLinker</h3>
+            <p>Połącz lokalną aplikację za pomocą tokenu API BaseLinker, aby dynamicznie pobrać listę katalogów, magazynów oraz grup cenowych.</p>
           </div>
 
           <div class="form-group">
-            <label>BaseLinker API Token</label>
-            <input type="password" id="setting-token" class="input-field" placeholder="Paste BaseLinker API Token">
+            <label>Token API BaseLinker</label>
+            <input type="password" id="setting-token" class="input-field" placeholder="Wklej token API BaseLinker">
           </div>
 
           <button id="btn-test-bl" class="btn btn-secondary">
-            Test Connection & Fetch Hierarchy
+            Przetestuj połączenie i pobierz strukturę
           </button>
 
           <div id="bl-hierarchy-info" class="hierarchy-box" style="display:none; margin-top: 20px;">
-            <h4>BaseLinker Discovery Summary</h4>
+            <h4>Podsumowanie struktury BaseLinker</h4>
             <div id="hierarchy-summary-badges"></div>
           </div>
 
           <div class="divider"></div>
 
           <div class="panel-header">
-            <h3>Windows System & Autostart</h3>
+            <h3>System Windows i autostart</h3>
           </div>
 
           <div class="toggle-row">
             <div>
-              <strong>Launch on Windows Boot (Autostart)</strong>
-              <p>Automatically start the sync engine in background when you log into Windows.</p>
+              <strong>Uruchamiaj przy starcie systemu Windows (Autostart)</strong>
+              <p>Automatycznie uruchamiaj silnik synchronizacji w tle po zalogowaniu do systemu Windows.</p>
             </div>
             <label class="switch">
               <input type="checkbox" id="setting-autostart">
@@ -229,8 +232,8 @@
 
           <div class="toggle-row">
             <div>
-              <strong>Minimize to Windows System Tray</strong>
-              <p>Closing the window keeps the application syncing silently in the taskbar tray.</p>
+              <strong>Minimalizuj do zasobnika systemowego Windows (Tray)</strong>
+              <p>Zamknięcie okna powoduje zminimalizowanie aplikacji do paska zadań i dalszą pracę w tle.</p>
             </div>
             <label class="switch">
               <input type="checkbox" id="setting-tray" checked>
@@ -241,98 +244,397 @@
           <div class="divider"></div>
 
           <div class="panel-header">
-            <h3>Application Updates & Version Control</h3>
-            <p>Check for code updates from the connected Git repository and update with one click.</p>
+            <h3>Aktualizacje aplikacji i kontrola wersji</h3>
+            <p>Sprawdzaj dostępność aktualizacji kodu ze zdalnego repozytorium Git i instaluj je jednym kliknięciem.</p>
           </div>
 
           <div class="update-card" id="update-details-box">
             <div class="update-meta-row">
               <div>
-                <span class="meta-label">Current Version / Commit</span>
-                <span class="meta-val font-mono" id="setting-current-commit">Checking...</span>
+                <span class="meta-label">Bieżąca wersja / Commit</span>
+                <span class="meta-val font-mono" id="setting-current-commit">Sprawdzanie...</span>
               </div>
               <div>
-                <span class="meta-label">Active Branch</span>
+                <span class="meta-label">Aktywna gałąź</span>
                 <span class="meta-val font-mono" id="setting-active-branch">main</span>
               </div>
               <div>
-                <span class="meta-label">Update Status</span>
-                <span class="meta-val" id="setting-update-status-badge"><span class="badge badge-info">Up to date</span></span>
+                <span class="meta-label">Status aktualizacji</span>
+                <span class="meta-val" id="setting-update-status-badge"><span class="badge badge-info">Wersja aktualna</span></span>
               </div>
             </div>
 
             <div id="update-commits-preview" style="display:none; margin-top: 15px;">
-              <span class="meta-label">Incoming Changes:</span>
+              <span class="meta-label">Nadchodzące zmiany:</span>
               <ul class="commit-list" id="incoming-commits-list"></ul>
             </div>
 
             <div class="form-row" style="margin-top: 16px;">
               <div class="form-group col-6">
-                <label>GitHub Personal Access Token (PAT)</label>
-                <input type="password" id="setting-github-token" class="input-field" placeholder="ghp_... (For private repositories)">
-                <small style="color: var(--text-muted); font-size: 11px;">Needed if the repository is private on a target machine without saved git credentials.</small>
+                <label>Osobisty token dostępu GitHub (PAT)</label>
+                <input type="password" id="setting-github-token" class="input-field" placeholder="ghp_... (dla repozytoriów prywatnych)">
+                <small style="color: var(--text-muted); font-size: 11px;">Wymagany, jeśli repozytorium jest prywatne na komputerze docelowym bez zapisanych poświadczeń git.</small>
               </div>
               <div class="form-group col-6">
-                <label>Remote Git Repository URL</label>
+                <label>Adres URL zdalnego repozytorium Git</label>
                 <input type="text" id="setting-github-repo" class="input-field" placeholder="https://github.com/Yuriipe/stock_to_oms_sync.git">
               </div>
             </div>
 
             <div class="update-card-actions" style="margin-top: 16px;">
               <button id="btn-settings-check-update" class="btn btn-secondary">
-                <span class="icon">🔍</span> Check for Updates
+                <span class="icon">🔍</span> Sprawdź aktualizacje
               </button>
               <button id="btn-settings-apply-update" class="btn btn-primary" style="display:none;">
-                <span class="icon">⚡</span> Update Application Now
+                <span class="icon">⚡</span> Zaktualizuj aplikację teraz
               </button>
             </div>
           </div>
 
           <div class="form-actions" style="margin-top: 30px;">
-            <button id="btn-save-settings" class="btn btn-primary">Save Global Settings</button>
+            <button id="btn-save-settings" class="btn btn-primary">Zapisz ustawienia globalne</button>
           </div>
         </div>
       </section>
 
-      <!-- TAB: ACTIVITY LOGS -->
+      <!-- ZAKŁADKA 4: DZIENNIK ZDARZEŃ (LOGS) -->
       <section id="tab-logs" class="tab-pane">
         <div class="panel">
           <div class="panel-header flex-between">
             <div>
-              <h3>Execution & Sync Logs</h3>
-              <p>History of automated background runs and manual sync dispatches.</p>
+              <h3>Dziennik wykonania i synchronizacji</h3>
+              <p>Historia automatycznych zadań w tle oraz ręcznych wywołań synchronizacji.</p>
             </div>
-            <button id="btn-refresh-logs" class="btn btn-secondary">Refresh</button>
+            <button id="btn-refresh-logs" class="btn btn-secondary">Odśwież</button>
           </div>
 
           <div class="table-scroll">
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>Timestamp</th>
-                  <th>Profile</th>
+                  <th>Data i godzina</th>
+                  <th>Profil</th>
                   <th>Status</th>
-                  <th>Processed</th>
-                  <th>Prices Updated</th>
-                  <th>Stocks Updated</th>
-                  <th>Message</th>
+                  <th>Przetworzono</th>
+                  <th>Zaktualizowane ceny</th>
+                  <th>Zaktualizowane stany</th>
+                  <th>Komunikat</th>
                 </tr>
               </thead>
               <tbody id="logs-tbody">
-                <!-- Log rows -->
+                <!-- Wiersze dziennika -->
               </tbody>
             </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ZAKŁADKA 5: INSTRUKCJA OBSŁUGI (MANUAL) -->
+      <section id="tab-manual" class="tab-pane">
+        <div class="manual-container">
+          <!-- Hero Header -->
+          <div class="manual-hero">
+            <div class="manual-hero-icon">📖</div>
+            <div class="manual-hero-text">
+              <h2>Instrukcja Obsługi XMLsync</h2>
+              <p>Kompletny podręcznik użytkownika opisujący konfigurację profili hurtowni, automatyczne mapowanie pól XML, synchronizację stanów i cen oraz bezpieczną integrację z platformą BaseLinker.</p>
+            </div>
+          </div>
+
+          <!-- Quick Navigation Bar -->
+          <div class="manual-nav-bar">
+            <a href="#manual-intro" class="manual-nav-link">📌 Wprowadzenie</a>
+            <a href="#manual-features" class="manual-nav-link">⚡ Główne funkcje</a>
+            <a href="#manual-steps" class="manual-nav-link">📝 Przewodnik krok po kroku</a>
+            <a href="#manual-safety" class="manual-nav-link">🛡️ Bezpieczeństwo i limity</a>
+            <a href="#manual-faq" class="manual-nav-link">❓ FAQ i rozwiązywanie problemów</a>
+          </div>
+
+          <!-- Sekcja 1: Wprowadzenie -->
+          <div class="manual-section" id="manual-intro">
+            <div class="manual-section-title">
+              <h3>📌 1. Wprowadzenie do aplikacji</h3>
+              <span class="section-badge">Przegląd</span>
+            </div>
+            <p style="font-size: 14px; color: var(--text-muted); line-height: 1.6;">
+              <strong>XMLsync</strong> to lokalne narzędzie automatyzujące przeznaczone do bezpośredniej pracy na komputerze z systemem Windows. Służy do ciągłej, bezobsługowej synchronizacji danych produktowych z plików XML lub Atom (od hurtowni, dostawców i producentów) z asortymentem, stanami magazynowymi i cennikami w systemie <strong>BaseLinker</strong>.
+            </p>
+            <div class="manual-callout manual-callout-info">
+              <span class="manual-callout-icon">💡</span>
+              <div>
+                <strong>Jak działa aplikacja:</strong> Program cyklicznie pobiera plik XML (ze zdalnego adresu URL lub wskazanego pliku lokalnego na dysku), porównuje oferty z lokalną bazą oraz katalogiem BaseLinker, wylicza różnice i wysyła wyłącznie zmodyfikowane ceny oraz stany magazynowe. W przypadku pojawienia się nowych artykułów w pliku dostawcy, program może automatycznie założyć je w BaseLinkerze.
+              </div>
+            </div>
+          </div>
+
+          <!-- Sekcja 2: Główne Funkcje -->
+          <div class="manual-section" id="manual-features">
+            <div class="manual-section-title">
+              <h3>⚡ 2. Główne możliwości programu</h3>
+              <span class="section-badge">Architektura & Możliwości</span>
+            </div>
+
+            <div class="manual-features-grid">
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">🌐</span> Dynamiczne wykrywanie struktury
+                </div>
+                <p>Automatycznie pobiera z Twojego konta BaseLinker listę wszystkich katalogów, magazynów (w tym kont wielomagazynowych) oraz grup cenowych za pomocą tokenu API.</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">⏱️</span> Rygorystyczny limit zapytań (&lt; 50 QPM)
+                </div>
+                <p>Wbudowany bufor dławiący żądania dba o to, by liczba wysyłanych zapytań do BaseLinkera nigdy nie przekroczyła limitu 50 na minutę, eliminując ryzyko blokady konta (błąd 429).</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">🛡️</span> Ochrona przed zerową ceną
+                </div>
+                <p>Ścisła blokada zapobiegająca synchronizacji lub utworzeniu produktów z ceną równą 0.00 zł lub ujemną. Chroni Twój sklep przed przypadkową sprzedażą produktów za darmo.</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">📦</span> Lokalna pamięć podręczna SQLite
+                </div>
+                <p>Indeksuje identyfikatory BaseLinker Product ID, kody SKU i EAN w lokalnej bazie. Pozwala przeglądać katalog w oknie programu, odświeżać stan na żądanie i czyścić puste wpisy.</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">✨</span> Automatyczne tworzenie brakujących pozycji
+                </div>
+                <p>Towary obecne w pliku XML dostawcy, których nie ma jeszcze w BaseLinkerze (ze stanem &gt; 0 i ceną &gt; 0), są automatycznie dodawane do wskazanego katalogu metodą <code>addInventoryProduct</code>.</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">🎯</span> Stały / standardowy stan magazynowy
+                </div>
+                <p>Możliwość narzucenia stałej wartości stanu (np. 10 sztuk) dla danego profilu, ignorując rzeczywisty stan z pliku XML w celu utrzymania ciągłości oferty na marketplace.</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">🗂️</span> Obsługa wielu profili dostawców
+                </div>
+                <p>Podłączaj nieograniczoną liczbę hurtowni (adresy URL HTTP/HTTPS lub lokalne pliki <code>.xml</code>) z indywidualnymi interwałami czasowymi i docelowymi magazynami.</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">🧩</span> Wizualny konfigurator mapowania pól
+                </div>
+                <p>Inteligentna analiza tagów XML w locie. Dopasuj ścieżki SKU, EAN, Ceny, Stanu magazynowego i Nazwy bez konieczności edycji jakiegokolwiek kodu.</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">🔍</span> Przyrostowy silnik różnicowy (Diff Engine)
+                </div>
+                <p>Śledzi poprzednie stany w bazie SQLite i wysyła do BaseLinkera tylko te produkty, w których zaszła rzeczywista zmiana ceny lub stanu magazynowego.</p>
+              </div>
+
+              <div class="manual-feature-box">
+                <div class="manual-feature-header">
+                  <span class="feature-icon">🖥️</span> Praca w zasobniku systemowym Windows
+                </div>
+                <p>Działa dyskretnie w tle, minimalizuje się do paska zadań (Tray) i może uruchamiać się samoczynnie przy starcie systemu operacyjnego.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sekcja 3: Przewodnik Krok po Kroku -->
+          <div class="manual-section" id="manual-steps">
+            <div class="manual-section-title">
+              <h3>📝 3. Przewodnik krok po kroku</h3>
+              <span class="section-badge">Instrukcja obsługi</span>
+            </div>
+
+            <div class="manual-steps-list">
+              <!-- Krok 1 -->
+              <div class="manual-step-item">
+                <div class="step-num-bubble">1</div>
+                <div class="manual-step-content">
+                  <h4>Krok 1: Podłączenie konta BaseLinker</h4>
+                  <p>Aby program mógł komunikować się z Twoim BaseLinkerem, wprowadź swój unikalny token API:</p>
+                  <ul>
+                    <li>Przejdź do zakładki <strong>⚙️ BaseLinker i system</strong> w menu bocznym.</li>
+                    <li>W polu <strong>Token API BaseLinker</strong> wklej klucz pobrany ze swojego panelu BaseLinker (ścieżka w panelu: <em>Konto/inne ➔ Moje konto ➔ API</em>).</li>
+                    <li>Kliknij przycisk <strong>Przetestuj połączenie i pobierz strukturę</strong>.</li>
+                    <li>System automatycznie zweryfikuje połączenie i wyświetli liczbę wykrytych katalogów, magazynów oraz grup cenowych.</li>
+                    <li>Możesz również zaznaczyć opcje <strong>Uruchamiaj przy starcie systemu Windows</strong> oraz <strong>Minimalizuj do zasobnika systemowego</strong>, po czym kliknąć <strong>Zapisz ustawienia globalne</strong>.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Krok 2 -->
+              <div class="manual-step-item">
+                <div class="step-num-bubble">2</div>
+                <div class="manual-step-content">
+                  <h4>Krok 2: Tworzenie profilu dostawcy (pliku XML)</h4>
+                  <p>Każdy plik XML od hurtowni konfigurowany jest jako osobny profil:</p>
+                  <ul>
+                    <li>Przejdź do zakładki <strong>📊 Profile i synchronizacja</strong> i kliknij <strong>+ Dodaj profil pliku</strong>.</li>
+                    <li>Podaj <strong>Nazwę profilu</strong> (np. <em>Hurtownia Zabawki - Oferta Główna</em>).</li>
+                    <li>Wybierz <strong>Typ źródła</strong>:
+                      <ul>
+                        <li><strong>Zdalny adres URL (HTTP/HTTPS)</strong>: wklej bezpośredni link do pliku XML dostarczony przez hurtownię. Jeśli plik wymaga autoryzacji, uzupełnij pole <em>Nagłówek autoryzacji</em> (np. <code>Basic ...</code> lub <code>Bearer ...</code>).</li>
+                        <li><strong>Lokalny plik XML (.xml)</strong>: kliknij przycisk <strong>📁 Przeglądaj...</strong> i wskaż plik zapisany na dysku Twojego komputera.</li>
+                      </ul>
+                    </li>
+                    <li>Określ <strong>Interwał synchronizacji</strong> w minutach (domyślnie 30 minut).</li>
+                    <li>Wybierz docelowy <strong>Katalog</strong>, <strong>Magazyn</strong> oraz <strong>Grupę cenową</strong> w BaseLinkerze.</li>
+                    <li>W polu <strong>Dopasuj produkty w BaseLinkerze według</strong> wskaż <strong>SKU</strong> lub <strong>EAN / Kod kreskowy</strong>.</li>
+                    <li>(Opcjonalnie) Jeśli chcesz, aby asortyment z tej hurtowni miał zawsze określoną dostępność, wpisz wartość w polu <strong>Stały / standardowy stan magazynowy</strong>.</li>
+                    <li>Kliknij <strong>Zapisz profil</strong>.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Krok 3 -->
+              <div class="manual-step-item">
+                <div class="step-num-bubble">3</div>
+                <div class="manual-step-content">
+                  <h4>Krok 3: Konfiguracja mapowania pól XML (Visual Field Mapper)</h4>
+                  <p>Dopasuj strukturę pliku XML dostawcy do standardu BaseLinkera:</p>
+                  <ul>
+                    <li>Przejdź do zakładki <strong>🧩 Mapowanie pól XML</strong> (lub kliknij <em>🧩 Edytuj mapowanie</em> na kafelku danego profilu).</li>
+                    <li>Wybierz profil z listy rozwijanej u góry.</li>
+                    <li>Kliknij <strong>🔍 Automatycznie wykryj tagi XML</strong>. Program przeanalizuje strukturę pliku i wyświetli wykryte znaczniki.</li>
+                    <li>Uzupełnij mapowane pola:
+                      <ul>
+                        <li><strong>Główny tag powtarzalny produktu:</strong> nazwa węzła XML powtarzającego się dla każdego artykułu (np. <span class="code-pill">product</span>, <span class="code-pill">item</span>, <span class="code-pill">o</span>, <span class="code-pill">towar</span>).</li>
+                        <li><strong>Ścieżka / tag SKU:</strong> nazwa tagu z kodem towaru (np. <span class="code-pill">sku</span>, <span class="code-pill">code</span>, <span class="code-pill">@_code</span>).</li>
+                        <li><strong>Ścieżka / tag EAN:</strong> znacznik kodu kreskowego (np. <span class="code-pill">ean</span>, <span class="code-pill">barcode</span>).</li>
+                        <li><strong>Ścieżka / tag Ceny:</strong> znacznik ceny (np. <span class="code-pill">price</span>, <span class="code-pill">cena</span>, <span class="code-pill">price_netto</span>).</li>
+                        <li><strong>Ścieżka / tag Stanu magazynowego:</strong> znacznik ilości (np. <span class="code-pill">qty</span>, <span class="code-pill">stock</span>, <span class="code-pill">stan</span>).</li>
+                        <li><strong>Ścieżka / tag Nazwy produktu:</strong> znacznik nazwy artykułu (np. <span class="code-pill">name</span>, <span class="code-pill">title</span>).</li>
+                      </ul>
+                    </li>
+                    <li>Kliknij <strong>Podgląd przetworzonych elementów</strong> i zweryfikuj w tabeli poniżej, czy wartości w kolumnach są prawidłowo odczytywane.</li>
+                    <li>Kliknij <strong>Zapisz mapowanie w profilu</strong>.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Krok 4 -->
+              <div class="manual-step-item">
+                <div class="step-num-bubble">4</div>
+                <div class="manual-step-content">
+                  <h4>Krok 4: Uruchomienie synchronizacji i monitorowanie</h4>
+                  <p>Praca silnika synchronizującego:</p>
+                  <ul>
+                    <li><strong>Ręczna synchronizacja:</strong> kliknij <strong>⚡ Synchronizuj teraz</strong> na kafelku profilu lub <strong>⚡ Synchronizuj wszystkie</strong> w górnym pasku, aby wykonać synchronizację od razu.</li>
+                    <li><strong>Automatyczny harmonogram:</strong> aplikacja automatycznie w tle co minutę sprawdza, czy minął zadany interwał dla poszczególnych profili i uruchamia aktualizację.</li>
+                    <li><strong>Weryfikacja wyników:</strong> w zakładce <strong>📋 Dziennik zdarzeń</strong> możesz na bieżąco przeglądać liczbę przetworzonych produktów, zaktualizowanych cen i stanów magazynowych oraz ewentualne komunikaty błędów.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- Krok 5 -->
+              <div class="manual-step-item">
+                <div class="step-num-bubble">5</div>
+                <div class="manual-step-content">
+                  <h4>Krok 5: Zarządzanie katalogiem produktów BaseLinker</h4>
+                  <p>Wykorzystaj wbudowaną przeglądarkę asortymentu w lokalnej pamięci podręcznej:</p>
+                  <ul>
+                    <li>Na kafelku profilu kliknij <strong>📦 Zobacz produkty BaseLinker</strong>.</li>
+                    <li>W oknie modalnym wyświetli się lista wszystkich zbuforowanych produktów z ich identyfikatorami BaseLinker ID, SKU, EAN oraz datą ostatniego zapisu.</li>
+                    <li>Kliknij <strong>🔄 Odśwież z BaseLinker</strong>, aby pobrać pełną, świeżą listę asortymentu bezpośrednio z API BaseLinkera do bazy programu.</li>
+                    <li>Jeśli na liście znajdują się produkty archiwalne lub błędne bez przypisanego SKU ani EAN, kliknij <strong>🧹 Wyczyść puste</strong>, aby zachować porządek w indeksie dopasowań.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sekcja 4: Bezpieczeństwo i limity API -->
+          <div class="manual-section" id="manual-safety">
+            <div class="manual-section-title">
+              <h3>🛡️ 4. Bezpieczeństwo i reguły biznesowe</h3>
+              <span class="section-badge">Ochrona Danych</span>
+            </div>
+
+            <div class="manual-callout manual-callout-warning">
+              <span class="manual-callout-icon">⚠️</span>
+              <div>
+                <strong>Zabezpieczenie przed zerową ceną:</strong> Jeśli produkt w pliku XML hurtowni ma cenę równą <code>0.00</code>, ujemną lub nieprawidłową, program automatycznie pomija aktualizację ceny dla tego towaru i nie utworzy go w BaseLinkerze jako nowy produkt. Zapobiega to kosztownym pomyłkom sprzedażowym.
+              </div>
+            </div>
+
+            <div class="manual-callout manual-callout-tip">
+              <span class="manual-callout-icon">✨</span>
+              <div>
+                <strong>Dławienie zapytań (Throttling &lt; 50 QPM):</strong> BaseLinker ogranicza częstotliwość zapytań do maksymalnie 50 na minutę. Boltline wyposażony jest w wewnętrzny kolejkowator, który pilnuje odstępów czasowych i wysyła aktualizacje w zoptymalizowanych paczkach do 1000 sztuk na zapytanie.
+              </div>
+            </div>
+
+            <div class="manual-callout manual-callout-info">
+              <span class="manual-callout-icon">🔍</span>
+              <div>
+                <strong>Silnik różnicowy (Diff Engine):</strong> Program nie nadpisuje w BaseLinkerze produktów, których cena ani stan magazynowy nie uległy zmianie od ostatniego przebiegu. Zapewnia to błyskawiczne działanie i minimalne zużycie limitów API.
+              </div>
+            </div>
+          </div>
+
+          <!-- Sekcja 5: FAQ -->
+          <div class="manual-section" id="manual-faq">
+            <div class="manual-section-title">
+              <h3>❓ 5. Często zadawane pytania (FAQ)</h3>
+              <span class="section-badge">Pomoc & Porady</span>
+            </div>
+
+            <div class="manual-faq-list">
+              <div class="manual-faq-card">
+                <div class="manual-faq-q">❓ Co oznacza komunikat błędu „Parsed 0 items”?</div>
+                <div class="manual-faq-a">
+                  Oznacza to, że podany w konfiguracji mapowania znacznik powtarzalnego produktu (np. <code>product</code>) nie został znaleziony w pliku XML. Przejdź do zakładki <strong>Mapowanie pól XML</strong>, kliknij przycisk <strong>🔍 Automatycznie wykryj tagi XML</strong> i sprawdź dokładnie nazwę głównego węzła w sekcji wykrytych tagów.
+                </div>
+              </div>
+
+              <div class="manual-faq-card">
+                <div class="manual-faq-q">❓ Jak zamapować pole, jeśli wartość znajduje się w atrybucie XML (np. &lt;product id="999" code="ABC"&gt;)?</div>
+                <div class="manual-faq-a">
+                  Wbudowany parser obsługuje odwołania do atrybutów za pomocą prefiksu małpy <code>@_</code>. Jeżeli kod produktu zapisany jest w atrybucie <code>code</code>, w polu ścieżki SKU wpisz: <span class="code-pill">@_code</span>. W przypadku zagnieżdżonych znaczników (np. <code>&lt;parameters&gt;&lt;ean&gt;...&lt;/ean&gt;&lt;/parameters&gt;</code>) wpisz: <span class="code-pill">parameters.ean</span>.
+                </div>
+              </div>
+
+              <div class="manual-faq-card">
+                <div class="manual-faq-q">❓ Kiedy program automatycznie zakłada nowy produkt w BaseLinkerze?</div>
+                <div class="manual-faq-a">
+                  Produkt z pliku XML zostanie automatycznie utworzony w BaseLinkerze tylko wtedy, gdy: (1) nie ma go jeszcze w katalogu BaseLinker pod danym SKU/EAN, (2) jego stan magazynowy jest większy od zera (<code>stock &gt; 0</code>), oraz (3) jego cena jest dodatnia (<code>price &gt; 0</code>). Towary niedostępne lub bez ceny nie są tworzone.
+                </div>
+              </div>
+
+              <div class="manual-faq-card">
+                <div class="manual-faq-q">❓ Czy program musi być stale otwarty na pulpicie?</div>
+                <div class="manual-faq-a">
+                  Nie. Po zaznaczeniu opcji <strong>Minimalizuj do zasobnika systemowego Windows</strong> w zakładce Ustawienia, zamknięcie okna krzyżykiem ukrywa program w zasobniku systemowym (obok zegara Windows). Silnik synchronizacji w tle nadal regularnie wykonuje zaplanowane zadania.
+                </div>
+              </div>
+
+              <div class="manual-faq-card">
+                <div class="manual-faq-q">❓ Jak zaktualizować aplikację do najnowszej wersji?</div>
+                <div class="manual-faq-a">
+                  Wystarczy kliknąć przycisk <strong>🔄 Sprawdź aktualizacje</strong> w górnym pasku programu lub przejść do sekcji <em>Aktualizacje aplikacji i kontrola wersji</em> w zakładce Ustawienia. Jeśli w zdalnym repozytorium pojawią się nowości, kliknij <strong>⚡ Zaktualizuj aplikację teraz</strong> — program sam pobierze zmiany i uruchomi się ponownie.
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- PROFILE MODAL (CREATE / EDIT) -->
+  <!-- MODAL: PROFIL PLIKU (TWORZENIE / EDYCJA) -->
   <div id="profile-modal" class="modal-overlay" style="display:none;">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 id="modal-title">Feed Profile</h3>
+        <h3 id="modal-title">Profil pliku XML</h3>
         <button id="btn-close-modal" class="btn-close">&times;</button>
       </div>
 
@@ -340,108 +642,112 @@
         <input type="hidden" id="prof-id">
 
         <div class="form-group">
-          <label>Profile Name</label>
-          <input type="text" id="prof-name" class="input-field" placeholder="e.g. Supplier X - Main Catalogue">
+          <label>Nazwa profilu</label>
+          <input type="text" id="prof-name" class="input-field" placeholder="np. Hurtownia X - Główny katalog">
         </div>
 
         <div class="form-row">
           <div class="form-group col-6">
-            <label>Source Type</label>
+            <label>Typ źródła</label>
             <select id="prof-source-type" class="input-field">
-              <option value="url">Remote URL (HTTP/HTTPS)</option>
-              <option value="file">Local XML File (.xml)</option>
+              <option value="url">Zdalny adres URL (HTTP/HTTPS)</option>
+              <option value="file">Lokalny plik XML (.xml)</option>
             </select>
           </div>
           <div class="form-group col-6">
-            <label>Sync Interval (Minutes)</label>
+            <label>Interwał synchronizacji (w minutach)</label>
             <input type="number" id="prof-interval" class="input-field" value="30" min="5">
           </div>
         </div>
 
         <div class="form-group" id="prof-source-group">
-          <label id="prof-source-label">XML Feed URL</label>
+          <label id="prof-source-label">Adres URL pliku XML</label>
           <div style="display: flex; gap: 8px;">
             <input type="text" id="prof-source-path" class="input-field" style="flex: 1;" placeholder="https://example.com/feed.xml">
             <input type="file" id="prof-file-input" accept=".xml,text/xml" style="display: none;">
             <button type="button" id="btn-browse-file" class="btn btn-secondary" style="display: none; white-space: nowrap;">
-              📁 Browse...
+              📁 Przeglądaj...
             </button>
           </div>
         </div>
 
         <div class="form-group" id="prof-auth-group">
-          <label>Authorization Header (Optional)</label>
-          <input type="text" id="prof-auth-header" class="input-field" placeholder="Bearer xyz or Basic abc">
+          <label>Nagłówek autoryzacji (Opcjonalnie)</label>
+          <input type="text" id="prof-auth-header" class="input-field" placeholder="Bearer xyz lub Basic abc">
         </div>
 
         <div class="divider"></div>
-        <h4>BaseLinker Target Mapping</h4>
+        <h4>Mapowanie docelowe w BaseLinker</h4>
 
         <div class="form-group">
-          <label>Target Inventory</label>
+          <label>Docelowy katalog</label>
           <select id="prof-inventory" class="input-field">
-            <option value="">Load inventories from Settings first...</option>
+            <option value="">Najpierw pobierz strukturę w Ustawieniach...</option>
           </select>
         </div>
 
         <div class="form-row">
           <div class="form-group col-6">
-            <label>Target Warehouse</label>
+            <label>Docelowy magazyn</label>
             <select id="prof-warehouse" class="input-field">
-              <option value="">Select Warehouse...</option>
+              <option value="">Wybierz magazyn...</option>
             </select>
           </div>
           <div class="form-group col-6">
-            <label>Target Price Group</label>
+            <label>Docelowa grupa cenowa</label>
             <select id="prof-pricegroup" class="input-field">
-              <option value="">Select Price Group...</option>
+              <option value="">Wybierz grupę cenową...</option>
             </select>
           </div>
         </div>
 
         <div class="form-row">
           <div class="form-group col-6">
-            <label>Match Products In BaseLinker By</label>
+            <label>Dopasuj produkty w BaseLinkerze według</label>
             <select id="prof-id-field" class="input-field">
               <option value="sku">SKU</option>
-              <option value="ean">EAN / Barcode</option>
+              <option value="ean">EAN / Kod kreskowy</option>
             </select>
           </div>
           <div class="form-group col-6">
-            <label>Standard / Fixed Stock (Optional)</label>
-            <input type="number" id="prof-fixed-stock" class="input-field" placeholder="Leave empty for XML feed value" min="0">
-            <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">If set, forces stock to this fixed level whenever in stock</small>
+            <label>Stały / standardowy stan magazynowy (Opcjonalnie)</label>
+            <input type="number" id="prof-fixed-stock" class="input-field" placeholder="Pozostaw puste, aby użyć wartości z pliku XML" min="0">
+            <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">Jeśli ustawione, wymusza ten stały stan dla każdego dostępnego produktu</small>
           </div>
         </div>
       </div>
 
       <div class="modal-footer">
-        <button id="btn-cancel-profile" class="btn btn-secondary">Cancel</button>
-        <button id="btn-save-profile" class="btn btn-primary">Save Profile</button>
+        <button id="btn-cancel-profile" class="btn btn-secondary">Anuluj</button>
+        <button id="btn-save-profile" class="btn btn-primary">Zapisz profil</button>
       </div>
     </div>
   </div>
 
-  <!-- View BaseLinker Products Modal -->
+  <!-- MODAL: PODGLĄD PRODUKTÓW BASELINKER -->
   <div id="base-products-modal" class="modal-overlay" style="display:none;">
     <div class="modal-card modal-card-lg">
       <div class="modal-header">
-        <h3 id="base-products-modal-title">BaseLinker Catalog Products</h3>
+        <h3 id="base-products-modal-title">Katalog produktów BaseLinker</h3>
         <button id="btn-close-base-products-modal" class="btn-close">&times;</button>
       </div>
       <div class="modal-body">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <span id="base-products-summary" style="font-size: 0.875rem; color: var(--text-muted);">Total cached in DB: 0</span>
-          <button id="btn-refresh-base-products" class="btn btn-secondary btn-sm">🔄 Refresh from BaseLinker</button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 8px;">
+          <span id="base-products-summary" style="font-size: 0.875rem; color: var(--text-muted);">Łącznie w bazie lokalnej: 0</span>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-clean-empty-base-products" class="btn btn-secondary btn-sm" title="Usuń produkty bez SKU i bez EAN">🧹 Wyczyść puste</button>
+            <button id="btn-refresh-base-products" class="btn btn-secondary btn-sm">🔄 Odśwież z BaseLinker</button>
+          </div>
         </div>
         <div class="table-scroll" style="max-height: 460px; overflow-y: auto;">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Base Product ID</th>
+                <th>ID produktu w Base</th>
                 <th>SKU</th>
                 <th>EAN</th>
-                <th>Last Cached</th>
+                <th>Ostatnia synchronizacja</th>
+                <th style="width: 80px; text-align: center;">Akcja</th>
               </tr>
             </thead>
             <tbody id="base-products-tbody"></tbody>
@@ -449,12 +755,12 @@
         </div>
       </div>
       <div class="modal-footer">
-        <button id="btn-close-base-products" class="btn btn-secondary">Close</button>
+        <button id="btn-close-base-products" class="btn btn-secondary">Zamknij</button>
       </div>
     </div>
   </div>
 
-  <!-- Toast Notifications Container -->
+  <!-- Kontener powiadomień Toast -->
   <div id="toast-container"></div>
 
   <script src="app.js"></script>

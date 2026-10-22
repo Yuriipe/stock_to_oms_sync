@@ -86,8 +86,19 @@ export class XmlParserService {
 
     for (const node of itemNodes) {
       let sku = mapping.skuPath ? this.resolvePath(node, mapping.skuPath) : undefined;
-      if (!sku && mapping.identifierField === 'sku') {
-        for (const candidate of ['sku', 'kod', 'symbol', 'code']) {
+      if (!sku) {
+        for (const candidate of [
+          'sku',
+          'kod',
+          'symbol',
+          'code',
+          'product_id',
+          'id',
+          'item_id',
+          'id_produktu',
+          'kod_produktu',
+          'numer'
+        ]) {
           const val = this.resolvePath(node, candidate);
           if (val) {
             sku = val;
@@ -97,8 +108,8 @@ export class XmlParserService {
       }
 
       let ean = mapping.eanPath ? this.resolvePath(node, mapping.eanPath) : undefined;
-      if (!ean && mapping.identifierField === 'ean') {
-        for (const candidate of ['ean', 'barcode']) {
+      if (!ean) {
+        for (const candidate of ['ean', 'barcode', 'kod_kreskowy', 'gtin', 'ean13']) {
           const val = this.resolvePath(node, candidate);
           if (val) {
             ean = val;
@@ -109,7 +120,7 @@ export class XmlParserService {
 
       let rawPrice = mapping.pricePath ? this.resolvePath(node, mapping.pricePath) : undefined;
       if (rawPrice === undefined) {
-        for (const candidate of ['price', 'cena', 'price_brutto', 'cena_brutto', 'gross_price']) {
+        for (const candidate of ['price', 'cena', 'price_brutto', 'cena_brutto', 'gross_price', 'cena_netto', 'net_price']) {
           const val = this.resolvePath(node, candidate);
           if (val !== undefined) {
             rawPrice = val;
@@ -129,12 +140,32 @@ export class XmlParserService {
         }
       }
 
-      const name = mapping.namePath ? this.resolvePath(node, mapping.namePath) : undefined;
+      let name = mapping.namePath ? this.resolvePath(node, mapping.namePath) : undefined;
+      if (!name) {
+        for (const candidate of ['name', 'nazwa', 'title', 'tytul', 'product_name', 'nazwa_produktu']) {
+          const val = this.resolvePath(node, candidate);
+          if (val) {
+            name = val;
+            break;
+          }
+        }
+      }
 
-      const price = rawPrice ? parseFloat(rawPrice.replace(',', '.')) : 0;
-      const stock = rawStock ? parseInt(rawStock.replace(/\s+/g, ''), 10) : 0;
+      const price = rawPrice ? (parseFloat(rawPrice.replace(',', '.')) || 0) : 0;
+      const stock = rawStock ? (parseInt(rawStock.replace(/\s+/g, ''), 10) || 0) : 0;
 
-      const identifier = mapping.identifierField === 'sku' ? (sku || '') : (ean || '');
+      // Primary identifier according to identifierField, falling back gracefully
+      let identifier = mapping.identifierField === 'sku' ? (sku || ean || '') : (ean || sku || '');
+      if (!identifier) {
+        for (const candidate of ['product_id', 'id', 'item_id', 'id_produktu']) {
+          const val = this.resolvePath(node, candidate);
+          if (val) {
+            identifier = val;
+            if (!sku) sku = val;
+            break;
+          }
+        }
+      }
 
       if (!identifier) {
         continue; // Skip items missing designated identifier

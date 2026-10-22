@@ -23,6 +23,12 @@ export function createApiServer(
   const app = express();
   app.use(cors());
   app.use(express.json());
+  app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+      return res.status(400).json({ error: 'Malformed JSON payload' });
+    }
+    next(err);
+  });
 
   const xmlParser = new XmlParserService();
   const diffEngine = new DiffEngine(db);
@@ -237,11 +243,38 @@ export function createApiServer(
 
       const client = new BaseLinkerClient(settings.baseLinkerToken);
       const products = await client.fetchAllInventoryProducts(inventoryId);
-      if (products.length > 0) {
-        db.upsertBaseProducts(inventoryId, products);
-      }
+      const { updated, deleted } = db.syncBaseProducts(inventoryId, products);
 
-      res.json({ success: true, count: products.length });
+      res.json({ success: true, count: updated, deleted });
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // Delete Single BaseLinker Product from Local Table Cache
+  app.delete('/api/baselinker/products/:inventoryId/:productId', (req, res) => {
+    try {
+      const inventoryId = parseInt(req.params.inventoryId, 10);
+      const productId = parseInt(req.params.productId, 10);
+      if (!inventoryId || !productId) {
+        return res.status(400).json({ error: 'Valid inventoryId and productId required' });
+      }
+      const deleted = db.deleteBaseProduct(inventoryId, productId);
+      res.json({ success: true, deleted });
+    } catch (e: unknown) {
+      res.status(500).json({ error: String(e) });
+    }
+  });
+
+  // Delete All Products Containing Nothing Except ID (no SKU & no EAN)
+  app.post('/api/baselinker/products/cleanup-empty', (req, res) => {
+    try {
+      const inventoryId = parseInt(req.body.inventoryId, 10);
+      if (!inventoryId) {
+        return res.status(400).json({ error: 'inventoryId required in body' });
+      }
+      const count = db.deleteEmptyBaseProducts(inventoryId);
+      res.json({ success: true, count });
     } catch (e: unknown) {
       res.status(500).json({ error: String(e) });
     }

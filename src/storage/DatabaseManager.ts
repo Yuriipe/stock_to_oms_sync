@@ -406,8 +406,96 @@ export class DatabaseManager {
     insertMany(products);
   }
 
+  /**
+   * Reconciles the local SQLite BaseLinker products cache with current products from BaseLinker.
+   * - Deletes any products that contain nothing except ID (missing both SKU and EAN).
+   * - Deletes any cached products for this inventory that no longer exist in BaseLinker.
+   * - Upserts current valid products.
+   */
+  public syncBaseProducts(
+    inventoryId: number,
+    products: Array<{ productId: number; sku?: string; ean?: string }>
+  ): { updated: number; deleted: number } {
+    // Filter out products containing nothing except ID (both SKU and EAN missing/empty)
+    const validProducts = products.filter(
+      p => (p.sku && p.sku.trim() !== '') || (p.ean && p.ean.trim() !== '')
+    );
+
+    const now = new Date().toISOString();
+    let deletedCount = 0;
+
+    const runSync = this.db.transaction(() => {
+      // 1. Delete products in this inventory that have empty SKU and empty EAN (only an ID)
+      const cleanEmpty = this.db.prepare(`
+        DELETE FROM baselinker_products
+        WHERE inventoryId = ? AND (sku IS NULL OR trim(sku) = '') AND (ean IS NULL OR trim(ean) = '')
+      `).run(inventoryId);
+      deletedCount += cleanEmpty.changes;
+
+      // 2. Delete products that no longer exist in BaseLinker
+      if (validProducts.length === 0) {
+        const delAll = this.db.prepare('DELETE FROM baselinker_products WHERE inventoryId = ?').run(inventoryId);
+        deletedCount += delAll.changes;
+      } else {
+        const existingRows = this.db.prepare(
+          'SELECT productId FROM baselinker_products WHERE inventoryId = ?'
+        ).all(inventoryId) as Array<{ productId: number }>;
+
+        const currentSet = new Set(validProducts.map(p => p.productId));
+        const idsToDelete = existingRows.map(r => r.productId).filter(id => !currentSet.has(id));
+
+        if (idsToDelete.length > 0) {
+          const delStmt = this.db.prepare('DELETE FROM baselinker_products WHERE inventoryId = ? AND productId = ?');
+          for (const id of idsToDelete) {
+            delStmt.run(inventoryId, id);
+          }
+          deletedCount += idsToDelete.length;
+        }
+
+        // 3. Upsert valid products
+        const insert = this.db.prepare(`
+          INSERT INTO baselinker_products (inventoryId, productId, sku, ean, updatedAt)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(inventoryId, productId) DO UPDATE SET
+            sku = excluded.sku,
+            ean = excluded.ean,
+            updatedAt = excluded.updatedAt
+        `);
+
+        for (const item of validProducts) {
+          insert.run(
+            inventoryId,
+            item.productId,
+            item.sku ? item.sku.trim() : null,
+            item.ean ? item.ean.trim() : null,
+            now
+          );
+        }
+      }
+    });
+
+    runSync();
+    return { updated: validProducts.length, deleted: deletedCount };
+  }
+
+  public deleteBaseProduct(inventoryId: number, productId: number): boolean {
+    const res = this.db.prepare('DELETE FROM baselinker_products WHERE inventoryId = ? AND productId = ?').run(inventoryId, productId);
+    return res.changes > 0;
+  }
+
+  public deleteEmptyBaseProducts(inventoryId: number): number {
+    const res = this.db.prepare(`
+      DELETE FROM baselinker_products
+      WHERE inventoryId = ? AND (sku IS NULL OR trim(sku) = '') AND (ean IS NULL OR trim(ean) = '')
+    `).run(inventoryId);
+    return res.changes;
+  }
+
   public saveSingleBaseProduct(inventoryId: number, productId: number, sku?: string, ean?: string): void {
-    this.upsertBaseProducts(inventoryId, [{ productId, sku, ean }]);
+    if ((!sku || sku.trim() === '') && (!ean || ean.trim() === '')) {
+      return;
+    }
+    this.upsertBaseProducts(inventoryId, [{ productId, sku: sku?.trim(), ean: ean?.trim() }]);
   }
 
   public getBaseProductsList(inventoryId: number, limit: number = 100, offset: number = 0): { total: number; products: Array<{ productId: number; sku?: string; ean?: string; updatedAt: string }> } {

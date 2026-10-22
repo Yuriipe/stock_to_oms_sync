@@ -1,4 +1,4 @@
-// Dashboard UI Controller
+// Kontroler Interfejsu Dashboard (XMLsync)
 const state = {
   settings: null,
   profiles: [],
@@ -6,32 +6,67 @@ const state = {
   activeProfile: null
 };
 
-// API Helpers
+// Pomocnik zapytań API
 async function api(path, options = {}) {
+  const fetchOptions = { ...options };
+  const headers = { 'Content-Type': 'application/json', ...(fetchOptions.headers || {}) };
+
+  if (fetchOptions.body && typeof fetchOptions.body === 'object' && !(fetchOptions.body instanceof FormData)) {
+    fetchOptions.body = JSON.stringify(fetchOptions.body);
+  }
+
   const res = await fetch('/api' + path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
+    ...fetchOptions,
+    headers
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+
+  let data;
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    data = await res.json();
+  } else {
+    const text = await res.text();
+    try {
+      data = JSON.parse(text);
+    } catch {
+      const stripped = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+      throw new Error(stripped || `Żądanie nie powiodło się (${res.status} ${res.statusText})`);
+    }
+  }
+
+  if (!res.ok) throw new Error(data.error || `Żądanie nie powiodło się (${res.status} ${res.statusText})`);
   return data;
 }
 
-// Navigation Tabs
+// Zakładki nawigacyjne
+const tabTitles = {
+  dashboard: 'Profile plików i status synchronizacji',
+  mapper: 'Wizualne mapowanie pól XML',
+  settings: 'Ustawienia BaseLinker i systemu',
+  logs: 'Dziennik zdarzeń i synchronizacji',
+  manual: 'Instrukcja obsługi programu'
+};
+
 document.querySelectorAll('.nav-item').forEach(button => {
   button.addEventListener('click', () => {
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     button.classList.add('active');
     const tabId = 'tab-' + button.dataset.tab;
-    document.getElementById(tabId).classList.add('active');
+    const tabPane = document.getElementById(tabId);
+    if (tabPane) tabPane.classList.add('active');
+
+    const pageTitle = document.getElementById('page-title');
+    if (pageTitle && tabTitles[button.dataset.tab]) {
+      pageTitle.textContent = tabTitles[button.dataset.tab];
+    }
 
     if (button.dataset.tab === 'logs') loadLogs();
     if (button.dataset.tab === 'mapper') populateMapperProfiles();
   });
 });
 
-// Load Initial Data
+// Ładowanie początkowych danych
 async function init() {
   try {
     state.settings = await api('/settings');
@@ -51,11 +86,11 @@ async function init() {
 
     await loadProfiles();
   } catch (e) {
-    console.error('Init error:', e);
+    console.error('Błąd inicjalizacji:', e);
   }
 }
 
-// BaseLinker Discovery
+// Pobieranie hierarchii BaseLinker
 async function loadHierarchy() {
   try {
     state.hierarchy = await api('/baselinker/hierarchy');
@@ -64,20 +99,20 @@ async function loadHierarchy() {
     hBox.style.display = 'block';
     badgeContainer.innerHTML = `
       <div class="badge-row">
-        <span class="badge badge-success">Inventories: ${state.hierarchy.inventories.length}</span>
-        <span class="badge badge-success">Warehouses: ${state.hierarchy.warehouses.length}</span>
-        <span class="badge badge-success">Price Groups: ${state.hierarchy.priceGroups.length}</span>
+        <span class="badge badge-success">Katalogi: ${state.hierarchy.inventories.length}</span>
+        <span class="badge badge-success">Magazyny: ${state.hierarchy.warehouses.length}</span>
+        <span class="badge badge-success">Grupy cenowe: ${state.hierarchy.priceGroups.length}</span>
       </div>
     `;
     populateModalDropdowns();
   } catch (e) {
-    alert('Failed to load BaseLinker hierarchy: ' + e.message);
+    alert('Nie udało się pobrać struktury BaseLinker: ' + e.message);
   }
 }
 
 document.getElementById('btn-test-bl').addEventListener('click', async () => {
   const token = document.getElementById('setting-token').value.trim();
-  if (!token) return alert('Please enter a BaseLinker token');
+  if (!token) return alert('Wprowadź token API BaseLinker');
   await api('/settings', { method: 'POST', body: JSON.stringify({ baseLinkerToken: token }) });
   await loadHierarchy();
 });
@@ -92,14 +127,14 @@ document.getElementById('btn-save-settings').addEventListener('click', async () 
       updateRepo: document.getElementById('setting-github-repo')?.value.trim() || ''
     };
     await api('/settings', { method: 'POST', body: JSON.stringify(updated) });
-    alert('Settings saved successfully!');
+    alert('Ustawienia zostały pomyślnie zapisane!');
     checkAppUpdates(false);
   } catch (e) {
-    alert('Error saving settings: ' + e.message);
+    alert('Błąd podczas zapisywania ustawień: ' + e.message);
   }
 });
 
-// Profiles
+// Profile plików
 async function loadProfiles() {
   state.profiles = await api('/profiles');
   const container = document.getElementById('profiles-list');
@@ -107,9 +142,9 @@ async function loadProfiles() {
   if (state.profiles.length === 0) {
     container.innerHTML = `
       <div class="panel col-span-full text-center" style="grid-column: 1 / -1; padding: 40px;">
-        <h3>No XML Feed Profiles Configured</h3>
-        <p style="margin: 10px 0 20px; color: var(--text-muted);">Create your first profile to connect a supplier XML/Atom file to BaseLinker.</p>
-        <button class="btn btn-primary" onclick="openProfileModal()">+ Add Your First Feed</button>
+        <h3>Brak skonfigurowanych profili XML</h3>
+        <p style="margin: 10px 0 20px; color: var(--text-muted);">Utwórz swój pierwszy profil, aby połączyć plik XML/Atom dostawcy z BaseLinkerem.</p>
+        <button class="btn btn-primary" onclick="openProfileModal()">+ Dodaj swój pierwszy plik</button>
       </div>
     `;
     return;
@@ -117,7 +152,7 @@ async function loadProfiles() {
 
   container.innerHTML = state.profiles.map(p => {
     const statusClass = p.lastSyncStatus === 'success' ? 'badge-success' : p.lastSyncStatus === 'error' ? 'badge-danger' : 'badge-neutral';
-    const statusText = p.lastSyncStatus || 'idle';
+    const statusText = p.lastSyncStatus === 'success' ? 'Sukces' : p.lastSyncStatus === 'error' ? 'Błąd' : 'Bezczynny';
     return `
       <div class="profile-card">
         <div class="profile-card-header">
@@ -125,32 +160,34 @@ async function loadProfiles() {
             <div class="profile-title">${p.name}</div>
             <span class="badge ${statusClass}">${statusText}</span>
           </div>
-          <button class="btn btn-secondary" onclick="editProfile('${p.id}')">Edit</button>
+          <button class="btn btn-secondary" onclick="editProfile('${p.id}')">Edytuj</button>
         </div>
 
         <div class="profile-meta">
-          <span>Source: <strong>${p.sourceType.toUpperCase()}</strong> (${p.sourcePath})</span>
-          <span>Target Inv: <strong>${p.targetInventoryId}</strong> | Wh: <strong>${p.targetWarehouseId}</strong> | PriceGrp: <strong>${p.targetPriceGroupId}</strong></span>
-          <span>Match Key: <strong>${p.identifierField.toUpperCase()}</strong> | Interval: <strong>${p.syncIntervalMinutes}m</strong>${p.fixedStock !== undefined && p.fixedStock !== null ? ` | Fixed Stock: <strong>${p.fixedStock}</strong>` : ''}</span>
-          <span>Base Products Cached: <strong style="color: var(--color-primary); cursor: pointer;" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 ${p.baseProductsCount ?? 0} items</strong></span>
-          <span>Last Run: <strong>${p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString() : 'Never'}</strong></span>
+          <span>Źródło: <strong>${p.sourceType.toUpperCase()}</strong> (${p.sourcePath})</span>
+          <span>Katalog docelowy: <strong>${p.targetInventoryId}</strong> | Magazyn: <strong>${p.targetWarehouseId}</strong> | Grupa cenowa: <strong>${p.targetPriceGroupId}</strong></span>
+          <span>Klucz dopasowania: <strong>${p.identifierField.toUpperCase()}</strong> | Interwał: <strong>${p.syncIntervalMinutes} min</strong>${p.fixedStock !== undefined && p.fixedStock !== null ? ` | Stały stan: <strong>${p.fixedStock} szt.</strong>` : ''}</span>
+          <span>Produkty w pamięci BaseLinker: <strong style="color: var(--color-primary); cursor: pointer;" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 ${p.baseProductsCount ?? 0} szt.</strong></span>
+          <span>Ostatnia synchronizacja: <strong>${p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString('pl-PL') : 'Nigdy'}</strong></span>
           ${p.lastSyncMessage ? `<span style="font-size: 11px; color: var(--text-muted);">${p.lastSyncMessage}</span>` : ''}
         </div>
 
         <div class="profile-card-actions">
-          <button class="btn btn-primary" onclick="triggerSync('${p.id}', this)">⚡ Sync Now</button>
-          <button class="btn btn-secondary" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 View Base Products (${p.baseProductsCount ?? 0})</button>
-          <button class="btn btn-secondary" onclick="goToMapper('${p.id}')">🧩 Edit Mapping</button>
-          <button class="btn btn-danger" onclick="deleteProfile('${p.id}')">Delete</button>
+          <button class="btn btn-primary" onclick="triggerSync('${p.id}', this)">⚡ Synchronizuj teraz</button>
+          <button class="btn btn-secondary" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 Zobacz produkty BaseLinker (${p.baseProductsCount ?? 0})</button>
+          <button class="btn btn-secondary" onclick="goToMapper('${p.id}')">🧩 Edytuj mapowanie</button>
+          <button class="btn btn-danger" onclick="deleteProfile('${p.id}')">Usuń</button>
         </div>
       </div>
     `;
   }).join('');
 }
 
-// Toast Notification System
+// System powiadomień Toast
 function showToast(title, message, type = 'info', duration = 5000) {
   const container = document.getElementById('toast-container');
+  if (!container) return;
+
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
   
@@ -173,7 +210,7 @@ function showToast(title, message, type = 'info', duration = 5000) {
   }, duration);
 }
 
-// Trigger Sync with Live Visual Progress
+// Uruchamianie synchronizacji z animacją i powiadomieniem
 window.triggerSync = async function(id, btnElement) {
   const profile = state.profiles.find(x => x.id === id);
   const name = profile ? profile.name : id;
@@ -181,27 +218,27 @@ window.triggerSync = async function(id, btnElement) {
   let originalHtml = '';
   if (btnElement) {
     originalHtml = btnElement.innerHTML;
-    btnElement.innerHTML = `<span class="spin">⚡</span> Syncing...`;
+    btnElement.innerHTML = `<span class="spin">⚡</span> Synchronizowanie...`;
     btnElement.disabled = true;
   }
 
-  showToast('Sync Started', `Syncing "${name}" with BaseLinker...`, 'info', 3000);
+  showToast('Rozpoczęto synchronizację', `Synchronizowanie „${name}” z BaseLinker...`, 'info', 3000);
 
   try {
     const res = await api(`/profiles/${id}/sync`, { method: 'POST' });
     if (res.success) {
       showToast(
-        'Sync Successful',
+        'Synchronizacja zakończona sukcesem',
         `<strong>${name}</strong>: ${res.message}`,
         'success',
         6000
       );
     } else {
-      showToast('Sync Warning', `${name}: ${res.message}`, 'warning', 6000);
+      showToast('Ostrzeżenie synchronizacji', `${name}: ${res.message}`, 'warning', 6000);
     }
     await loadProfiles();
   } catch (e) {
-    showToast('Sync Failed', `${name}: ${e.message}`, 'error', 7000);
+    showToast('Błąd synchronizacji', `${name}: ${e.message}`, 'error', 7000);
   } finally {
     if (btnElement) {
       btnElement.innerHTML = originalHtml;
@@ -213,10 +250,10 @@ window.triggerSync = async function(id, btnElement) {
 document.getElementById('btn-sync-all').addEventListener('click', async function() {
   const btn = this;
   const originalHtml = btn.innerHTML;
-  btn.innerHTML = `<span class="spin">⚡</span> Syncing All...`;
+  btn.innerHTML = `<span class="spin">⚡</span> Synchronizowanie wszystkich...`;
   btn.disabled = true;
 
-  showToast('Bulk Sync Started', 'Executing sync for all enabled feed profiles...', 'info', 3000);
+  showToast('Rozpoczęto synchronizację zbiorczą', 'Wykonywanie synchronizacji dla wszystkich aktywnych profili...', 'info', 3000);
 
   let successCount = 0;
   let failCount = 0;
@@ -227,14 +264,14 @@ document.getElementById('btn-sync-all').addEventListener('click', async function
         const res = await api(`/profiles/${p.id}/sync`, { method: 'POST' });
         if (res.success) {
           successCount++;
-          showToast(`Finished: ${p.name}`, res.message, 'success', 5000);
+          showToast(`Zakończono: ${p.name}`, res.message, 'success', 5000);
         } else {
           failCount++;
-          showToast(`Issue: ${p.name}`, res.message, 'warning', 5000);
+          showToast(`Ostrzeżenie: ${p.name}`, res.message, 'warning', 5000);
         }
       } catch (err) {
         failCount++;
-        showToast(`Failed: ${p.name}`, err.message, 'error', 5000);
+        showToast(`Błąd: ${p.name}`, err.message, 'error', 5000);
       }
     }
   }
@@ -243,8 +280,8 @@ document.getElementById('btn-sync-all').addEventListener('click', async function
   btn.disabled = false;
 
   showToast(
-    'Bulk Sync Completed',
-    `Processed all profiles (${successCount} succeeded, ${failCount} failed).`,
+    'Zakończono synchronizację zbiorczą',
+    `Przetworzono wszystkie profile (sukces: ${successCount}, błędy: ${failCount}).`,
     failCount === 0 ? 'success' : 'warning',
     6000
   );
@@ -260,12 +297,12 @@ function updateSourceTypeUI() {
   const authGroup = document.getElementById('prof-auth-group');
 
   if (type === 'file') {
-    label.textContent = 'Local XML File Path';
-    input.placeholder = 'e.g. C:\\Feeds\\supplier.xml or /path/to/feed.xml';
+    label.textContent = 'Ścieżka do lokalnego pliku XML';
+    input.placeholder = 'np. C:\\Katalogi\\dostawca.xml lub /sciezka/plik.xml';
     browseBtn.style.display = 'inline-flex';
     authGroup.style.display = 'none';
   } else {
-    label.textContent = 'XML Feed URL';
+    label.textContent = 'Adres URL pliku XML';
     input.placeholder = 'https://example.com/feed.xml';
     browseBtn.style.display = 'none';
     authGroup.style.display = 'flex';
@@ -285,22 +322,21 @@ document.getElementById('btn-browse-file').addEventListener('click', async () =>
       return;
     }
   } catch (err) {
-    console.warn('Native file picker request failed, falling back to input:', err);
+    console.warn('Żądanie wyboru pliku w systemie nie powiodło się, używam pola input:', err);
   }
-  // Fallback if running outside Electron or if route returned unsupported
+  // Alternatywa w przeglądarce
   document.getElementById('prof-file-input').click();
 });
 
 document.getElementById('prof-file-input').addEventListener('change', (e) => {
   const file = e.target.files && e.target.files[0];
   if (file) {
-    // In Electron with full path access, file.path is populated; otherwise file.name
     const filePath = file.path || file.name;
     document.getElementById('prof-source-path').value = filePath;
   }
 });
 
-// Profile Modal Management
+// Zarządzanie oknem modalnym profilu
 window.openProfileModal = function() {
   document.getElementById('prof-id').value = '';
   document.getElementById('prof-name').value = '';
@@ -310,7 +346,7 @@ window.openProfileModal = function() {
   document.getElementById('prof-auth-header').value = '';
   document.getElementById('prof-interval').value = '30';
   document.getElementById('prof-fixed-stock').value = '';
-  document.getElementById('modal-title').textContent = 'Add Feed Profile';
+  document.getElementById('modal-title').textContent = 'Dodaj profil pliku XML';
   updateSourceTypeUI();
   document.getElementById('profile-modal').style.display = 'flex';
   populateModalDropdowns();
@@ -335,14 +371,14 @@ window.editProfile = function(id) {
   document.getElementById('prof-auth-header').value = p.authHeader || '';
   document.getElementById('prof-interval').value = p.syncIntervalMinutes;
   document.getElementById('prof-fixed-stock').value = p.fixedStock !== undefined && p.fixedStock !== null ? p.fixedStock : '';
-  document.getElementById('modal-title').textContent = 'Edit Profile: ' + p.name;
+  document.getElementById('modal-title').textContent = 'Edytuj profil: ' + p.name;
   updateSourceTypeUI();
   populateModalDropdowns(p.targetInventoryId, p.targetWarehouseId, p.targetPriceGroupId);
   document.getElementById('profile-modal').style.display = 'flex';
 };
 
 window.deleteProfile = async function(id) {
-  if (!confirm('Are you sure you want to delete this profile?')) return;
+  if (!confirm('Czy na pewno chcesz usunąć ten profil?')) return;
   await api(`/profiles/${id}`, { method: 'DELETE' });
   loadProfiles();
 };
@@ -398,11 +434,11 @@ document.getElementById('btn-save-profile').addEventListener('click', async () =
     document.getElementById('profile-modal').style.display = 'none';
     await loadProfiles();
   } catch (e) {
-    alert('Failed to save profile: ' + e.message);
+    alert('Nie udało się zapisać profilu: ' + e.message);
   }
 });
 
-// XML Field Mapper Logic
+// Logika mapowania pól XML
 function populateMapperProfiles() {
   const select = document.getElementById('mapper-profile-select');
   select.innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
@@ -433,7 +469,7 @@ window.goToMapper = function(profileId) {
   loadProfileMapping(profileId);
 };
 
-// Inspect XML candidate tags
+// Wykrywanie tagów kandydujących XML
 document.getElementById('btn-inspect-xml').addEventListener('click', async () => {
   const profileId = document.getElementById('mapper-profile-select').value;
   const p = state.profiles.find(x => x.id === profileId);
@@ -455,17 +491,16 @@ document.getElementById('btn-inspect-xml').addEventListener('click', async () =>
 
     list.innerHTML = res.detectedItemTags.map(t =>
       `<span class="badge-tag" onclick="document.getElementById('map-item-tag').value = '${t}'">${t}</span>`
-    ).join('') + '<br><div style="margin-top: 8px;"><strong>Sample Child Tags:</strong></div>' +
+    ).join('') + '<br><div style="margin-top: 8px;"><strong>Przykładowe tagi właściwości:</strong></div>' +
     res.sampleProperties.slice(0, 20).map(prop =>
       `<span class="badge-tag" onclick="copyTagToActive('${prop}')">${prop}</span>`
     ).join('');
   } catch (e) {
-    alert('Inspection error: ' + e.message);
+    alert('Błąd inspekcji XML: ' + e.message);
   }
 });
 
 window.copyTagToActive = function(prop) {
-  // Convenience helper: set into price/stock/sku depending on name pattern
   const lower = prop.toLowerCase();
   if (lower.includes('price') || lower.includes('cena')) document.getElementById('map-price-path').value = prop;
   else if (lower.includes('stock') || lower.includes('qty') || lower.includes('quantity') || lower.includes('stan') || lower.includes('ilosc')) document.getElementById('map-stock-path').value = prop;
@@ -474,7 +509,7 @@ window.copyTagToActive = function(prop) {
   else if (lower.includes('name') || lower.includes('title') || lower.includes('nazwa')) document.getElementById('map-name-path').value = prop;
 };
 
-// Preview Mapping
+// Podgląd mapowania
 document.getElementById('btn-preview-mapping').addEventListener('click', async () => {
   const profileId = document.getElementById('mapper-profile-select').value;
   const p = state.profiles.find(x => x.id === profileId);
@@ -515,15 +550,15 @@ document.getElementById('btn-preview-mapping').addEventListener('click', async (
       </tr>
     `).join('');
   } catch (e) {
-    alert('Preview error: ' + e.message);
+    alert('Błąd podglądu: ' + e.message);
   }
 });
 
-// Save Mapping to Profile
+// Zapisywanie mapowania do profilu
 document.getElementById('btn-save-mapping').addEventListener('click', async () => {
   const profileId = document.getElementById('mapper-profile-select').value;
   const p = state.profiles.find(x => x.id === profileId);
-  if (!p) return alert('No profile selected');
+  if (!p) return alert('Nie wybrano żadnego profilu');
 
   p.identifierField = document.getElementById('map-id-field').value;
   p.mapping = {
@@ -538,23 +573,23 @@ document.getElementById('btn-save-mapping').addEventListener('click', async () =
 
   try {
     await api('/profiles', { method: 'POST', body: JSON.stringify(p) });
-    alert('Mapping saved successfully to profile: ' + p.name);
+    alert('Mapowanie zostało pomyślnie zapisane w profilu: ' + p.name);
     loadProfiles();
   } catch (e) {
-    alert('Failed to save mapping: ' + e.message);
+    alert('Nie udało się zapisać mapowania: ' + e.message);
   }
 });
 
-// Logs
+// Dziennik zdarzeń (Logs)
 async function loadLogs() {
   try {
     const logs = await api('/logs');
     const tbody = document.getElementById('logs-tbody');
     tbody.innerHTML = logs.map(l => `
       <tr>
-        <td>${new Date(l.timestamp).toLocaleString()}</td>
-        <td>${l.profileId || 'Global'}</td>
-        <td><span class="badge ${l.status === 'success' ? 'badge-success' : 'badge-danger'}">${l.status}</span></td>
+        <td>${new Date(l.timestamp).toLocaleString('pl-PL')}</td>
+        <td>${l.profileId || 'Globalny'}</td>
+        <td><span class="badge ${l.status === 'success' ? 'badge-success' : 'badge-danger'}">${l.status === 'success' ? 'Sukces' : 'Błąd'}</span></td>
         <td>${l.itemsProcessed}</td>
         <td>${l.pricesUpdated}</td>
         <td>${l.stocksUpdated}</td>
@@ -562,13 +597,13 @@ async function loadLogs() {
       </tr>
     `).join('');
   } catch (e) {
-    console.error('Logs load error:', e);
+    console.error('Błąd ładowania dziennika:', e);
   }
 }
 
 document.getElementById('btn-refresh-logs').addEventListener('click', loadLogs);
 
-// Application Updates Controller
+// Kontroler aktualizacji aplikacji
 async function checkAppUpdates(isManual = false) {
   const btnTop = document.getElementById('btn-check-updates');
   const btnSettings = document.getElementById('btn-settings-check-update');
@@ -597,10 +632,10 @@ async function checkAppUpdates(isManual = false) {
       if (updateBanner) {
         updateBanner.style.display = 'flex';
         document.getElementById('update-banner-desc').textContent = 
-          `${data.commitsBehind || 1} new commit(s) available on remote '${data.branch}'. Current: ${data.currentShortCommit} ➔ Remote: ${data.remoteShortCommit}`;
+          `${data.commitsBehind || 1} nowa(e) zmiana(y) dostępna(e) w repozytorium zdalnym '${data.branch}'. Bieżąca wersja: ${data.currentShortCommit} ➔ Zdalna: ${data.remoteShortCommit}`;
       }
       if (settingStatusBadge) {
-        settingStatusBadge.innerHTML = `<span class="badge badge-warning">Update Available (${data.commitsBehind} behind)</span>`;
+        settingStatusBadge.innerHTML = `<span class="badge badge-warning">Dostępna aktualizacja (${data.commitsBehind} oczekujących)</span>`;
       }
       if (btnApply) btnApply.style.display = 'inline-block';
 
@@ -610,25 +645,25 @@ async function checkAppUpdates(isManual = false) {
       }
 
       if (isManual) {
-        showToast('Update Available', `Found ${data.commitsBehind} new commit(s) on ${data.branch}`, 'info');
+        showToast('Dostępna aktualizacja', `Znaleziono ${data.commitsBehind} nowych zmian na gałęzi ${data.branch}`, 'info');
       }
     } else {
       if (updateBadge) updateBadge.style.display = 'none';
       if (updateBanner) updateBanner.style.display = 'none';
       if (settingStatusBadge) {
-        settingStatusBadge.innerHTML = `<span class="badge badge-success">Up to date (${data.currentShortCommit})</span>`;
+        settingStatusBadge.innerHTML = `<span class="badge badge-success">Wersja aktualna (${data.currentShortCommit})</span>`;
       }
       if (btnApply) btnApply.style.display = 'none';
       if (commitsPreview) commitsPreview.style.display = 'none';
 
       if (isManual) {
-        showToast('Up to Date', `Application is running the latest version (${data.currentShortCommit})`, 'success');
+        showToast('Wersja aktualna', `Aplikacja działa w najnowszej wersji (${data.currentShortCommit})`, 'success');
       }
     }
   } catch (err) {
-    console.error('Update check error:', err);
+    console.error('Błąd sprawdzania aktualizacji:', err);
     if (isManual) {
-      showToast('Update Check Failed', err.message, 'error');
+      showToast('Błąd sprawdzania aktualizacji', err.message, 'error');
     }
   } finally {
     if (btnTop) btnTop.querySelector('.icon').classList.remove('spin');
@@ -640,53 +675,53 @@ async function triggerApplyUpdate() {
   const btnBanner = document.getElementById('btn-banner-update');
   const btnSettings = document.getElementById('btn-settings-apply-update');
 
-  const confirmed = confirm('Are you sure you want to pull the latest code updates and rebuild the application?');
+  const confirmed = confirm('Czy na pewno chcesz pobrać najnowsze aktualizacje kodu i przebudować aplikację?');
   if (!confirmed) return;
 
   try {
     if (btnBanner) {
       btnBanner.disabled = true;
-      btnBanner.textContent = 'Updating...';
+      btnBanner.textContent = 'Aktualizowanie...';
     }
     if (btnSettings) {
       btnSettings.disabled = true;
-      btnSettings.textContent = 'Updating & Building...';
+      btnSettings.textContent = 'Aktualizowanie i budowanie...';
     }
 
-    showToast('Updating Application', 'Pulling latest code and building...', 'info');
+    showToast('Aktualizowanie aplikacji', 'Pobieranie najnowszego kodu i budowanie...', 'info');
 
     const result = await api('/updates/apply', { method: 'POST' });
 
-    showToast('Update Success', `${result.message} Restarting application...`, 'success');
+    showToast('Aktualizacja powiodła się', `${result.message} Ponowne uruchamianie aplikacji...`, 'success');
 
-    // Trigger restart
+    // Uruchomienie restartu
     setTimeout(async () => {
       try {
         await api('/updates/restart', { method: 'POST' });
       } catch (e) {
-        // Expected if server shuts down
+        // Oczekiwane w przypadku zamknięcia serwera
       }
-      // Reload UI after restart
+      // Przeładowanie strony po restarcie
       setTimeout(() => {
         window.location.reload();
       }, 3000);
     }, 1500);
 
   } catch (err) {
-    console.error('Apply update error:', err);
-    showToast('Update Failed', err.message, 'error');
+    console.error('Błąd instalacji aktualizacji:', err);
+    showToast('Aktualizacja nie powiodła się', err.message, 'error');
     if (btnBanner) {
       btnBanner.disabled = false;
-      btnBanner.textContent = '⚡ Update Now';
+      btnBanner.textContent = '⚡ Zaktualizuj teraz';
     }
     if (btnSettings) {
       btnSettings.disabled = false;
-      btnSettings.textContent = '⚡ Update Application Now';
+      btnSettings.textContent = '⚡ Zaktualizuj aplikację teraz';
     }
   }
 }
 
-// Update Event Listeners
+// Nasłuchiwanie zdarzeń aktualizacji
 document.getElementById('btn-check-updates')?.addEventListener('click', () => checkAppUpdates(true));
 document.getElementById('btn-settings-check-update')?.addEventListener('click', () => checkAppUpdates(true));
 document.getElementById('btn-banner-update')?.addEventListener('click', triggerApplyUpdate);
@@ -695,32 +730,9 @@ document.getElementById('btn-banner-dismiss')?.addEventListener('click', () => {
   document.getElementById('update-banner').style.display = 'none';
 });
 
-// Toast notification helper
-function showToast(title, message, type = 'info') {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.innerHTML = `
-    <div class="toast-icon">${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</div>
-    <div class="toast-content">
-      <div class="toast-title">${title}</div>
-      <div class="toast-message">${message}</div>
-    </div>
-  `;
-
-  container.appendChild(toast);
-  setTimeout(() => toast.classList.add('show'), 10);
-  setTimeout(() => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-  }, 4000);
-}
-
 let currentModalInventoryId = null;
 
-// BaseLinker Products Modal Logic
+// Logika okna modalnego produktów BaseLinker
 window.openBaseProductsModal = async function(inventoryId) {
   currentModalInventoryId = inventoryId;
   const modal = document.getElementById('base-products-modal');
@@ -728,12 +740,24 @@ window.openBaseProductsModal = async function(inventoryId) {
   const summary = document.getElementById('base-products-summary');
   const title = document.getElementById('base-products-modal-title');
 
-  title.textContent = `BaseLinker Catalog Products (Inventory ID: ${inventoryId})`;
-  summary.textContent = 'Loading products from local cache...';
-  tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading...</td></tr>';
+  title.textContent = `Katalog produktów BaseLinker (ID katalogu: ${inventoryId})`;
+  summary.textContent = 'Ładowanie produktów z lokalnej bazy...';
+  tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Ładowanie...</td></tr>';
   modal.style.display = 'flex';
 
   await loadBaseProductsList(inventoryId);
+};
+
+window.deleteBaseProductRow = async function(inventoryId, productId) {
+  if (!confirm(`Czy na pewno usunąć produkt ${productId} z lokalnej tabeli katalogu?`)) return;
+  try {
+    await api(`/baselinker/products/${inventoryId}/${productId}`, { method: 'DELETE' });
+    showToast('Produkt usunięty', `Produkt ${productId} został usunięty z lokalnej tabeli.`, 'info', 3000);
+    await loadBaseProductsList(inventoryId);
+    await loadProfiles();
+  } catch (err) {
+    showToast('Błąd usuwania', err.message, 'error', 4000);
+  }
 };
 
 async function loadBaseProductsList(inventoryId) {
@@ -742,24 +766,30 @@ async function loadBaseProductsList(inventoryId) {
 
   try {
     const res = await api(`/baselinker/products?inventoryId=${inventoryId}&limit=100`);
-    summary.innerHTML = `Total cached in DB: <strong>${res.total}</strong> (showing latest ${res.products.length})`;
+    summary.innerHTML = `Łącznie w bazie lokalnej: <strong>${res.total}</strong> (pokazano najnowsze ${res.products.length})`;
 
     if (res.products.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 24px;">No products cached yet. Click "🔄 Refresh from BaseLinker" or run a sync.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">Brak produktów w pamięci podręcznej. Kliknij „🔄 Odśwież z BaseLinker” lub uruchom synchronizację.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = res.products.map(p => `
-      <tr>
-        <td class="font-mono"><strong>${p.productId}</strong></td>
-        <td class="font-mono">${p.sku || '<span style="color:var(--text-muted);">-</span>'}</td>
-        <td class="font-mono">${p.ean || '<span style="color:var(--text-muted);">-</span>'}</td>
-        <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(p.updatedAt).toLocaleString()}</td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = res.products.map(p => {
+      const isMissingIdentifiers = (!p.sku || p.sku.trim() === '') && (!p.ean || p.ean.trim() === '');
+      return `
+        <tr ${isMissingIdentifiers ? 'style="background: rgba(239, 68, 68, 0.08);"' : ''}>
+          <td class="font-mono"><strong>${p.productId}</strong> ${isMissingIdentifiers ? '<span style="color:var(--color-danger); font-size: 0.75rem;">(Brak SKU/EAN)</span>' : ''}</td>
+          <td class="font-mono">${p.sku || '<span style="color:var(--text-muted);">-</span>'}</td>
+          <td class="font-mono">${p.ean || '<span style="color:var(--text-muted);">-</span>'}</td>
+          <td style="font-size: 0.8rem; color: var(--text-muted);">${new Date(p.updatedAt).toLocaleString('pl-PL')}</td>
+          <td style="text-align: center;">
+            <button class="btn btn-danger btn-sm" style="padding: 3px 8px; font-size: 0.75rem;" onclick="deleteBaseProductRow(${inventoryId}, ${p.productId})" title="Usuń z lokalnej tabeli">🗑️</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
   } catch (err) {
-    summary.textContent = 'Error loading products';
-    tbody.innerHTML = `<tr><td colspan="4" style="color: var(--color-danger); text-align: center;">${err.message}</td></tr>`;
+    summary.textContent = 'Błąd podczas ładowania produktów';
+    tbody.innerHTML = `<tr><td colspan="5" style="color: var(--color-danger); text-align: center;">${err.message}</td></tr>`;
   }
 }
 
@@ -767,21 +797,41 @@ document.getElementById('btn-refresh-base-products')?.addEventListener('click', 
   if (!currentModalInventoryId) return;
   const btn = this;
   const originalText = btn.textContent;
-  btn.textContent = '⏳ Fetching from BaseLinker...';
+  btn.textContent = '⏳ Pobieranie z BaseLinker...';
   btn.disabled = true;
 
   try {
     const res = await api('/baselinker/products/refresh', {
       method: 'POST',
-      body: { inventoryId: currentModalInventoryId }
+      body: JSON.stringify({ inventoryId: currentModalInventoryId })
     });
-    showToast('Catalog Refreshed', `Fetched and cached ${res.count} products from BaseLinker.`, 'success', 4000);
+    const msg = `Zsynchronizowano ${res.count} produktów z BaseLinker${res.deleted ? ` (usunięto ${res.deleted} usuniętych/pustych pozycji)` : ''}.`;
+    showToast('Odświeżono katalog', msg, 'success', 4000);
     await loadBaseProductsList(currentModalInventoryId);
     await loadProfiles();
   } catch (err) {
-    showToast('Refresh Failed', err.message, 'error', 5000);
+    showToast('Błąd odświeżania', err.message, 'error', 5000);
   } finally {
     btn.textContent = originalText;
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btn-clean-empty-base-products')?.addEventListener('click', async function() {
+  if (!currentModalInventoryId) return;
+  const btn = this;
+  btn.disabled = true;
+  try {
+    const res = await api('/baselinker/products/cleanup-empty', {
+      method: 'POST',
+      body: JSON.stringify({ inventoryId: currentModalInventoryId })
+    });
+    showToast('Czyszczenie zakończone', `Usunięto ${res.count} produkt(ów) bez identyfikatorów SKU/EAN.`, 'success', 4000);
+    await loadBaseProductsList(currentModalInventoryId);
+    await loadProfiles();
+  } catch (err) {
+    showToast('Błąd czyszczenia', err.message, 'error', 4000);
+  } finally {
     btn.disabled = false;
   }
 });
@@ -793,7 +843,6 @@ document.getElementById('btn-close-base-products')?.addEventListener('click', ()
   document.getElementById('base-products-modal').style.display = 'none';
 });
 
-// Initialize on page load
+// Inicjalizacja przy starcie strony
 init();
 checkAppUpdates(false);
-

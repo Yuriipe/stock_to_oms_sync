@@ -102,4 +102,63 @@ describe('DatabaseManager & Storage Repository', () => {
     expect(multiMap.get('ART-7714')).toEqual([1001, 1002]);
     expect(multiMap.get('EASY-99')).toEqual([1003]);
   });
+
+  it('should reconcile BaseLinker products with syncBaseProducts, deleting removed and empty items', () => {
+    // Initial cache with 3 items: 1 normal, 1 to be removed from BaseLinker, 1 empty (only ID)
+    dbManager.upsertBaseProducts(101, [
+      { productId: 1001, sku: 'SKU-A' },
+      { productId: 1002, sku: 'SKU-TO-DELETE' },
+      { productId: 1003, sku: '', ean: '' } // contains nothing except ID
+    ]);
+
+    expect(dbManager.getBaseProductsCount(101)).toBe(3);
+
+    // Sync with fresh BaseLinker state: only productId 1001 and new 1004 exist
+    const result = dbManager.syncBaseProducts(101, [
+      { productId: 1001, sku: 'SKU-A-UPDATED' },
+      { productId: 1004, sku: 'SKU-NEW' }
+    ]);
+
+    expect(result.updated).toBe(2);
+    expect(result.deleted).toBe(2); // 1003 (empty) and 1002 (no longer in Base)
+    expect(dbManager.getBaseProductsCount(101)).toBe(2);
+
+    const list = dbManager.getBaseProductsList(101);
+    const ids = list.products.map(p => p.productId);
+    expect(ids).toContain(1001);
+    expect(ids).toContain(1004);
+    expect(ids).not.toContain(1002);
+    expect(ids).not.toContain(1003);
+  });
+
+  it('should delete a single product with deleteBaseProduct', () => {
+    dbManager.upsertBaseProducts(101, [{ productId: 5001, sku: 'SKU-5001' }]);
+    expect(dbManager.getBaseProductsCount(101)).toBe(1);
+
+    const deleted = dbManager.deleteBaseProduct(101, 5001);
+    expect(deleted).toBe(true);
+    expect(dbManager.getBaseProductsCount(101)).toBe(0);
+  });
+
+  it('should clean up products with missing SKU and EAN with deleteEmptyBaseProducts', () => {
+    dbManager.upsertBaseProducts(101, [
+      { productId: 6001, sku: 'VALID' },
+      { productId: 6002, sku: '', ean: '' },
+      { productId: 6003, sku: undefined, ean: undefined }
+    ]);
+
+    expect(dbManager.getBaseProductsCount(101)).toBe(3);
+
+    const cleaned = dbManager.deleteEmptyBaseProducts(101);
+    expect(cleaned).toBe(2);
+    expect(dbManager.getBaseProductsCount(101)).toBe(1);
+  });
+
+  it('should refuse to save products containing nothing except ID in saveSingleBaseProduct', () => {
+    dbManager.saveSingleBaseProduct(101, 7001, '', '');
+    expect(dbManager.getBaseProductsCount(101)).toBe(0);
+
+    dbManager.saveSingleBaseProduct(101, 7002, 'SKU-VALID', undefined);
+    expect(dbManager.getBaseProductsCount(101)).toBe(1);
+  });
 });

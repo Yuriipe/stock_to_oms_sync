@@ -1,4 +1,4 @@
-# Boltline Base XML Sync
+# XMLsync
 
 Local automation tool designed to run directly on Windows to synchronize multiple supplier XML / Atom feeds with BaseLinker inventories, warehouses, and price groups.
 
@@ -13,6 +13,7 @@ Local automation tool designed to run directly on Windows to synchronize multipl
 - **Standard / Fixed Stock Setting:** Optionally define a constant stock value per feed profile that overrides feed stock levels to keep inventory at a guaranteed level.
 - **Multiple Feed Profiles:** Connect multiple supplier XML files (URLs or local `.xml` files) with individual scheduling and BaseLinker inventory/warehouse/price group targets.
 - **Visual XML Field Mapper:** Auto-inspects XML files and dynamically maps tags (SKU, EAN, Price, Stock) to handle changing supplier formats without code modifications.
+- **Automated 30-Minute Schedule & Instant Reconnection Recovery:** Base stock and inventory are automatically updated in the local database every 30 minutes (customizable per profile). If an internet connection drop occurs, the scheduler safely pauses and triggers an immediate update as soon as internet connectivity is restored, rather than waiting for the next full 30-minute cycle.
 - **Incremental Diff Engine:** Tracks previous stock & price states in local SQLite to avoid redundant API calls and prevent rate-limiting (429).
 - **Windows System Tray & Autostart:** Runs silently in the background, minimizes to the Windows taskbar tray, and supports autostart on Windows login.
 - **Local Web UI:** Modern dark dashboard served at `http://127.0.0.1:3890`.
@@ -27,6 +28,7 @@ Local automation tool designed to run directly on Windows to synchronize multipl
    - Select your target BaseLinker Inventory, Warehouse, and Price Group.
    - Choose **Source Type**: Remote URL (HTTP/HTTPS) or Local XML File (.xml) with file browser picker support.
    - (Optional) Set **Standard / Fixed Stock** to enforce a fixed stock level whenever in stock.
+   - Set sync interval (defaults to 30 minutes).
 4. In **XML Field Mapper**, click **Auto-Detect XML Tags** and verify your field mappings with **Preview Parsed Items**.
 5. Click **Sync Now** or let the automated background scheduler sync periodically.
 
@@ -37,7 +39,8 @@ Local automation tool designed to run directly on Windows to synchronize multipl
 - `src/parser/XmlParserService.ts`: Streaming XML parser supporting dynamic dot-notation paths and candidate tag discovery.
 - `src/diff/DiffEngine.ts`: Calculates price/stock deltas against cached states.
 - `src/service/SyncCoordinator.ts`: Orchestrates ingestion, BaseLinker product ID resolution, pagination sync, auto-creation of missing items, and update dispatch.
-- `src/main.ts`: Electron desktop host with system tray and Windows startup hooks.
+- `src/service/SyncSchedulerService.ts`: Manages periodic profile syncing (every 30 minutes), checks internet connectivity, and immediately retriggers pending/failed updates once connectivity returns.
+- `src/main.ts`: Electron desktop host with system tray, background scheduler, and Windows startup hooks.
 - `public/`: UI dashboard, XML visual mapper, and log viewer.
 
 ## Building & Deploying the Binary

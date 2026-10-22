@@ -1,6 +1,6 @@
 @echo off
-title Boltline Base XML Sync
-echo Starting Boltline Base XML Sync...
+title XMLsync
+echo Starting XMLsync...
 
 REM Check if node_modules exists
 if not exist "node_modules" (

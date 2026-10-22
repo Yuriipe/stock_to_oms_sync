@@ -6,7 +6,7 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const RELEASE_DIR = path.join(ROOT_DIR, 'release');
 
 console.log('====================================================');
-console.log('  Boltline Base XML Sync: Binary Deployment Builder  ');
+console.log('  XMLsync: Binary Deployment Builder  ');
 console.log('====================================================\n');
 
 try {

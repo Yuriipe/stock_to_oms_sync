@@ -124,4 +124,46 @@ describe('XmlParserService with Dynamic Mapping', () => {
     expect(items[0].sku).toBe('ART-123');
     expect(items[0].stock).toBe(10);
   });
+
+  it('should fall back to product_id when sku and ean are empty, and handle missing price', async () => {
+    const xml = `
+      <products>
+        <product>
+          <product_id>386333526</product_id>
+          <name>Poduszka Masło Pluszowa</name>
+          <sku></sku>
+          <ean></ean>
+          <quantity>0</quantity>
+          <price>10.00</price>
+        </product>
+        <product>
+          <product_id>999999</product_id>
+          <name>Zero Price Product</name>
+          <sku>ART-ZERO</sku>
+          <quantity>5</quantity>
+          <price></price>
+        </product>
+      </products>
+    `;
+
+    const items = await service.parseXml(xml, {
+      itemTag: 'product',
+      identifierField: 'sku',
+      skuPath: 'sku',
+      eanPath: 'ean',
+      pricePath: 'price',
+      stockPath: 'stock'
+    });
+
+    expect(items).toHaveLength(2);
+    expect(items[0].identifier).toBe('386333526');
+    expect(items[0].sku).toBe('386333526');
+    expect(items[0].name).toBe('Poduszka Masło Pluszowa');
+    expect(items[0].price).toBe(10);
+    expect(items[0].stock).toBe(0);
+
+    expect(items[1].identifier).toBe('ART-ZERO');
+    expect(items[1].price).toBe(0);
+    expect(items[1].stock).toBe(5);
+  });
 });

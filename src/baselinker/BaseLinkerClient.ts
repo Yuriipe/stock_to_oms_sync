@@ -106,7 +106,8 @@ export class BaseLinkerClient {
   public async updateInventoryProductsPrices(
     inventoryId: number,
     productsPrices: Record<string | number, number>,
-    priceGroupId?: number
+    priceGroupId?: number,
+    onWarning?: (productId: number, message: string) => void
   ): Promise<number> {
     const entries = Object.entries(productsPrices);
     if (entries.length === 0) return 0;
@@ -140,6 +141,14 @@ export class BaseLinkerClient {
       const warningsCount = res.warnings ? Object.keys(res.warnings).length : 0;
       if (warningsCount > 0) {
         console.warn('BaseLinker updateInventoryProductsPrices warnings:', res.warnings);
+        if (onWarning && res.warnings) {
+          for (const [prodIdStr, msg] of Object.entries(res.warnings)) {
+            const pId = Number(prodIdStr);
+            if (!isNaN(pId)) {
+              onWarning(pId, String(msg));
+            }
+          }
+        }
       }
 
       const successInChunk = Math.max(0, (res.counter ?? chunk.length) - warningsCount);
@@ -156,7 +165,8 @@ export class BaseLinkerClient {
   public async updateInventoryProductsStock(
     inventoryId: number,
     productsStock: Record<string | number, number>,
-    warehouseId?: string
+    warehouseId?: string,
+    onWarning?: (productId: number, message: string) => void
   ): Promise<number> {
     const entries = Object.entries(productsStock);
     if (entries.length === 0) return 0;
@@ -193,6 +203,14 @@ export class BaseLinkerClient {
       const warningsCount = res.warnings ? Object.keys(res.warnings).length : 0;
       if (warningsCount > 0) {
         console.warn('BaseLinker updateInventoryProductsStock warnings:', res.warnings);
+        if (onWarning && res.warnings) {
+          for (const [prodIdStr, msg] of Object.entries(res.warnings)) {
+            const pId = Number(prodIdStr);
+            if (!isNaN(pId)) {
+              onWarning(pId, String(msg));
+            }
+          }
+        }
       }
 
       const successInChunk = Math.max(0, (res.counter ?? chunk.length) - warningsCount);
@@ -252,7 +270,10 @@ export class BaseLinkerClient {
     const reqParameters: Record<string, unknown> = {
       inventory_id: params.inventory_id,
       sku: params.sku || '',
-      ean: params.ean || ''
+      ean: params.ean || '',
+      text_fields: {
+        name: params.name || params.sku || 'Product ' + (params.sku || 'Item')
+      }
     };
 
     if (params.prices && Object.keys(params.prices).length > 0) {
@@ -261,12 +282,6 @@ export class BaseLinkerClient {
 
     if (params.stock && Object.keys(params.stock).length > 0) {
       reqParameters.stock = params.stock;
-    }
-
-    if (params.name) {
-      reqParameters.text_fields = {
-        name: params.name
-      };
     }
 
     const res = await this.request<{ status: string; product_id: number }>(

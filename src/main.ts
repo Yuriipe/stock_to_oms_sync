@@ -21,19 +21,19 @@ const { app: expressApp, syncCoordinator } = createApiServer(db, {
     const win = mainWindow || BrowserWindow.getFocusedWindow();
     const result = win
       ? await dialog.showOpenDialog(win, {
-          title: 'Select XML Feed File',
+          title: 'Wybierz plik XML z danymi',
           properties: ['openFile'],
           filters: [
-            { name: 'XML Files', extensions: ['xml'] },
-            { name: 'All Files', extensions: ['*'] }
+            { name: 'Pliki XML', extensions: ['xml'] },
+            { name: 'Wszystkie pliki', extensions: ['*'] }
           ]
         })
       : await dialog.showOpenDialog({
-          title: 'Select XML Feed File',
+          title: 'Wybierz plik XML z danymi',
           properties: ['openFile'],
           filters: [
-            { name: 'XML Files', extensions: ['xml'] },
-            { name: 'All Files', extensions: ['*'] }
+            { name: 'Pliki XML', extensions: ['xml'] },
+            { name: 'Wszystkie pliki', extensions: ['*'] }
           ]
         });
 
@@ -60,27 +60,11 @@ function setAutoStart(enable: boolean) {
   });
 }
 
-// Background scheduler interval (checks enabled profiles every minute)
-const scheduleTimer = setInterval(async () => {
-  try {
-    const profiles = db.getProfiles();
-    const now = Date.now();
+import { SyncSchedulerService } from './service/SyncSchedulerService';
 
-    for (const profile of profiles) {
-      if (!profile.enabled) continue;
-
-      const intervalMs = (profile.syncIntervalMinutes || 30) * 60 * 1000;
-      const lastRun = profile.lastSyncAt ? new Date(profile.lastSyncAt).getTime() : 0;
-
-      if (now - lastRun >= intervalMs) {
-        console.log(`[Scheduler] Auto-sync triggered for profile: ${profile.name}`);
-        await syncCoordinator.syncProfile(profile.id).catch(console.error);
-      }
-    }
-  } catch (err) {
-    console.error('[Scheduler Error]:', err);
-  }
-}, 60 * 1000);
+// Background scheduler with internet connection detection & auto-retry
+const syncScheduler = new SyncSchedulerService(db, syncCoordinator);
+syncScheduler.start();
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -88,7 +72,7 @@ function createWindow() {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: 'Boltline Base XML Sync',
+    title: 'XMLsync',
     backgroundColor: '#0c0f17',
     webPreferences: {
       nodeIntegration: false,
@@ -117,18 +101,18 @@ function createTray() {
   );
 
   tray = new Tray(icon);
-  tray.setToolTip('Boltline Base XML Sync');
+  tray.setToolTip('XMLsync');
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Open Dashboard',
+      label: 'Otwórz panel',
       click: () => {
         mainWindow?.show();
         mainWindow?.focus();
       }
     },
     {
-      label: 'Sync All Active Feeds',
+      label: 'Synchronizuj wszystkie aktywne pliki',
       click: async () => {
         const profiles = db.getProfiles();
         for (const p of profiles) {
@@ -140,7 +124,7 @@ function createTray() {
     },
     { type: 'separator' },
     {
-      label: 'Exit',
+      label: 'Zakończ',
       click: () => {
         isQuitting = true;
         app.quit();
@@ -183,7 +167,7 @@ if (!gotTheLock) {
 
 app.on('before-quit', () => {
   isQuitting = true;
-  clearInterval(scheduleTimer);
+  syncScheduler.stop();
   server.close();
 });
 
