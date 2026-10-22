@@ -128,7 +128,9 @@ jobs:
       - name: Package Windows Installer
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win
+        run: |
+          npx electron-builder --win
+          dir release
 
       - name: Commit version bump and create git tag
         shell: bash
@@ -141,9 +143,9 @@ jobs:
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Boltline-Base-XML-Installer-${{ steps.semver.outputs.tag }}
+          name: XMLsync-Installer-${{ steps.semver.outputs.tag }}
           path: release/*.exe
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

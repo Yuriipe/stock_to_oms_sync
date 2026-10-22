@@ -11,9 +11,9 @@ if not exist "node_modules" (
 REM Check if built files exist
 if not exist "dist\main.js" (
     echo Building project...
-    call npm run build
+    call npx tsc
 )
 
 echo Launching app...
-call npm start
+call npx electron ./dist/main.js
 pause
