@@ -75,6 +75,46 @@ describe('DatabaseManager & Storage Repository', () => {
     expect(dbManager.getProfiles()).toHaveLength(0);
   });
 
+  it('should save and retrieve price multiplier, currency, and group modifiers', () => {
+    const profile: FeedProfile = {
+      id: 'profile-price-test',
+      name: 'Price Profile',
+      enabled: true,
+      sourceType: 'url',
+      sourcePath: 'https://example.com/feed.xml',
+      targetInventoryId: 101,
+      targetWarehouseId: 'bl_1',
+      targetPriceGroupId: 201,
+      identifierField: 'sku',
+      mapping: {
+        itemTag: 'product',
+        identifierField: 'sku',
+        skuPath: 'sku',
+        eanPath: 'ean',
+        pricePath: 'price',
+        stockPath: 'qty'
+      },
+      syncIntervalMinutes: 30,
+      priceMultiplier: 1.25,
+      priceCurrency: 'EUR',
+      groupPriceModifiers: {
+        'Elektronika': 1.15,
+        'Akcesoria': 1.30
+      }
+    };
+
+    dbManager.saveProfile(profile);
+
+    const retrieved = dbManager.getProfileById('profile-price-test');
+    expect(retrieved).toBeDefined();
+    expect(retrieved?.priceMultiplier).toBe(1.25);
+    expect(retrieved?.priceCurrency).toBe('EUR');
+    expect(retrieved?.groupPriceModifiers).toEqual({
+      'Elektronika': 1.15,
+      'Akcesoria': 1.30
+    });
+  });
+
   it('should store and query sync logs', () => {
     dbManager.addSyncLog({
       profileId: 'profile-1',

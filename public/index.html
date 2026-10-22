@@ -722,6 +722,46 @@
             <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">Jeśli ustawione, wymusza ten stały stan dla każdego dostępnego produktu</small>
           </div>
         </div>
+
+        <div class="divider"></div>
+        <h4>Modyfikacja cen źródłowych</h4>
+        
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label>Mnożnik / Narzut ceny</label>
+            <input type="number" id="prof-price-multiplier" class="input-field" value="1.00" step="0.01" min="0.01" placeholder="np. 1.25 (narzut 25%)">
+            <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">Współczynnik ceny: 1.0 = bez zmian, 1.20 = +20% do ceny</small>
+          </div>
+          <div class="form-group col-6">
+            <label>Waluta źródłowa (przelicznik wg NBP)</label>
+            <select id="prof-price-currency" class="input-field">
+              <option value="PLN">PLN (brak przewalutowania - 1:1)</option>
+              <option value="EUR">EUR (Euro wg średniego kursu NBP)</option>
+              <option value="USD">USD (Dolar amerykański wg NBP)</option>
+              <option value="GBP">GBP (Funt szterling wg NBP)</option>
+              <option value="CZK">CZK (Korona czeska wg NBP)</option>
+              <option value="CHF">CHF (Frank szwajcarski wg NBP)</option>
+              <option value="HUF">HUF (Forint węgierski wg NBP)</option>
+              <option value="UAH">UAH (Hrywna ukraińska wg NBP)</option>
+              <option value="SEK">SEK (Korona szwedzka wg NBP)</option>
+              <option value="NOK">NOK (Korona norweska wg NBP)</option>
+              <option value="DKK">DKK (Korona duńska wg NBP)</option>
+              <option value="CNY">CNY (Yuan chiński wg NBP)</option>
+            </select>
+            <small id="nbp-currency-hint" style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">Aktualny kurs NBP: 1.0000 PLN</small>
+          </div>
+        </div>
+
+        <div class="form-group" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-top: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label style="font-weight: 600; margin: 0; font-size: 0.85rem;">Modyfikator według grup towarowych OMS / Base (Opcjonalnie)</label>
+            <span class="badge badge-neutral" style="font-size: 0.7rem;">Grupy OMS</span>
+          </div>
+          <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-bottom: 10px;">
+            Pozwala zdefiniować indywidualny mnożnik ceny dla konkretnej grupy / kategorii towaru (zgodnie z tagiem/grupą OMS w BaseLinkerze). Wpisz w formacie: <code>NazwaGrupy: Mnożnik</code> (jedna grupa w linii).
+          </small>
+          <textarea id="prof-group-modifiers" class="input-field" rows="3" placeholder="np.&#10;Elektronika: 1.15&#10;Akcesoria: 1.30&#10;Odzież: 1.20" style="font-family: monospace; font-size: 0.8rem;"></textarea>
+        </div>
       </div>
 
       <div class="modal-footer">

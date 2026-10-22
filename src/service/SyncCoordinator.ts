@@ -7,6 +7,7 @@ import { fetchXmlSource } from '../utils/xmlFetcher';
 import { XmlParserService } from '../parser/XmlParserService';
 import { DiffEngine } from '../diff/DiffEngine';
 import { FeedProfile } from '../types';
+import { NbpRateService } from './NbpRateService';
 
 export interface SyncExecutionResult {
   profileId: string;
@@ -74,6 +75,28 @@ export class SyncCoordinator {
         const fixedVal = Number(profile.fixedStock);
         for (const item of items) {
           item.stock = fixedVal;
+        }
+      }
+
+      // Apply price modifications (Multiplier, NBP exchange rate)
+      const multiplier = (profile.priceMultiplier !== undefined && profile.priceMultiplier !== null && profile.priceMultiplier > 0)
+        ? Number(profile.priceMultiplier)
+        : 1.0;
+      const currency = (profile.priceCurrency || 'PLN').toUpperCase().trim();
+      let exchangeRate = 1.0;
+      if (currency !== 'PLN') {
+        try {
+          exchangeRate = await NbpRateService.getRate(currency);
+        } catch (nbpErr) {
+          console.warn(`[SyncCoordinator] Could not get NBP rate for currency ${currency}, defaulting to 1.0:`, nbpErr);
+        }
+      }
+
+      for (const item of items) {
+        if (typeof item.price === 'number' && !isNaN(item.price) && item.price > 0) {
+          // Calculation: sourcePrice * exchangeRate * multiplier
+          const modified = item.price * exchangeRate * multiplier;
+          item.price = Math.round(modified * 100) / 100;
         }
       }
 

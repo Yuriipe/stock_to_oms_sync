@@ -182,4 +182,53 @@ describe('SyncCoordinator', () => {
     expect(list.products[0].productId).toBe(386333526);
     expect(list.products[0].sku).toBe('386333526');
   });
+
+  it('should apply price multiplier and NBP exchange rate during sync', async () => {
+    const priceProfile: FeedProfile = {
+      ...testProfile,
+      id: 'price-mod-profile',
+      priceMultiplier: 1.20, // +20%
+      priceCurrency: 'EUR'
+    };
+    db.saveProfile(priceProfile);
+
+    // Mock NBP API response for EUR
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('api.nbp.pl')) {
+        return {
+          data: [{
+            table: 'A',
+            rates: [{ code: 'EUR', mid: 4.50 }]
+          }]
+        };
+      }
+      // Feed XML
+      return {
+        data: `
+          <catalog>
+            <item>
+              <sku>EUR-PROD-1</sku>
+              <name>Euro Item</name>
+              <price>10.00</price>
+              <stock>5</stock>
+            </item>
+          </catalog>
+        `
+      };
+    });
+
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { status: 'SUCCESS', products: {} }
+    });
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { status: 'SUCCESS', product_id: 9901 }
+    });
+
+    const result = await coordinator.syncProfile(priceProfile.id);
+    expect(result.success).toBe(true);
+
+    // Calculated price: 10.00 (EUR) * 4.50 (rate) * 1.20 (multiplier) = 54.00 PLN
+    const cached = db.getCacheEntry(priceProfile.id, 'EUR-PROD-1');
+    expect(cached?.lastPrice).toBe(54.00);
+  });
 });

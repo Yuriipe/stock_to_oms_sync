@@ -167,9 +167,10 @@ async function loadProfiles() {
           <span>Źródło: <strong>${p.sourceType.toUpperCase()}</strong> (${p.sourcePath})</span>
           <span>Katalog docelowy: <strong>${p.targetInventoryId}</strong> | Magazyn: <strong>${p.targetWarehouseId}</strong> | Grupa cenowa: <strong>${p.targetPriceGroupId}</strong></span>
           <span>Klucz dopasowania: <strong>${p.identifierField.toUpperCase()}</strong> | Interwał: <strong>${p.syncIntervalMinutes} min</strong>${p.fixedStock !== undefined && p.fixedStock !== null ? ` | Stały stan: <strong>${p.fixedStock} szt.</strong>` : ''}</span>
+          <span>Modyfikacja ceny: <strong>${p.priceMultiplier && p.priceMultiplier !== 1 ? `x${p.priceMultiplier}` : '1.0x (standard)'}</strong>${p.priceCurrency && p.priceCurrency !== 'PLN' ? ` | Waluta: <strong>${p.priceCurrency} (NBP)</strong>` : ' | PLN'}${p.groupPriceModifiers && Object.keys(p.groupPriceModifiers).length > 0 ? ` | Grupy: <strong>${Object.keys(p.groupPriceModifiers).length} reguł</strong>` : ''}</span>
           <span>Produkty w pamięci BaseLinker: <strong style="color: var(--color-primary); cursor: pointer;" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 ${p.baseProductsCount ?? 0} szt.</strong></span>
           <span>Ostatnia synchronizacja: <strong>${p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString('pl-PL') : 'Nigdy'}</strong></span>
-          ${p.lastSyncMessage ? `<span style="font-size: 11px; color: var(--text-muted);">${p.lastSyncMessage}</span>` : ''}
+          ${p.lastSyncMessage ? `<div class="profile-status-msg status-${p.lastSyncStatus || 'neutral'}">${p.lastSyncStatus === 'error' ? '⚠️ ' : p.lastSyncStatus === 'success' ? '✅ ' : 'ℹ️ '}${p.lastSyncMessage}</div>` : ''}
         </div>
 
         <div class="profile-card-actions">
@@ -346,6 +347,10 @@ window.openProfileModal = function() {
   document.getElementById('prof-auth-header').value = '';
   document.getElementById('prof-interval').value = '30';
   document.getElementById('prof-fixed-stock').value = '';
+  document.getElementById('prof-price-multiplier').value = '1.00';
+  document.getElementById('prof-price-currency').value = 'PLN';
+  document.getElementById('prof-group-modifiers').value = '';
+  updateNbpCurrencyHint('PLN');
   document.getElementById('modal-title').textContent = 'Dodaj profil pliku XML';
   updateSourceTypeUI();
   document.getElementById('profile-modal').style.display = 'flex';
@@ -371,6 +376,19 @@ window.editProfile = function(id) {
   document.getElementById('prof-auth-header').value = p.authHeader || '';
   document.getElementById('prof-interval').value = p.syncIntervalMinutes;
   document.getElementById('prof-fixed-stock').value = p.fixedStock !== undefined && p.fixedStock !== null ? p.fixedStock : '';
+  document.getElementById('prof-price-multiplier').value = p.priceMultiplier !== undefined && p.priceMultiplier !== null ? p.priceMultiplier : '1.00';
+  document.getElementById('prof-price-currency').value = p.priceCurrency || 'PLN';
+  
+  // Format groupPriceModifiers object as text lines
+  let groupModifiersText = '';
+  if (p.groupPriceModifiers && typeof p.groupPriceModifiers === 'object') {
+    groupModifiersText = Object.entries(p.groupPriceModifiers)
+      .map(([group, mult]) => `${group}: ${mult}`)
+      .join('\n');
+  }
+  document.getElementById('prof-group-modifiers').value = groupModifiersText;
+  updateNbpCurrencyHint(p.priceCurrency || 'PLN');
+
   document.getElementById('modal-title').textContent = 'Edytuj profil: ' + p.name;
   updateSourceTypeUI();
   populateModalDropdowns(p.targetInventoryId, p.targetWarehouseId, p.targetPriceGroupId);
@@ -401,10 +419,60 @@ function populateModalDropdowns(invId, whId, pgId) {
   ).join('');
 }
 
+// Live NBP exchange rate fetcher for currency hint
+let cachedNbpRates = {};
+async function updateNbpCurrencyHint(currency) {
+  const hintEl = document.getElementById('nbp-currency-hint');
+  if (!hintEl) return;
+  if (currency === 'PLN') {
+    hintEl.textContent = 'Aktualny kurs NBP: 1.0000 PLN (brak przewalutowania)';
+    return;
+  }
+  hintEl.textContent = `Pobieranie aktualnego kursu NBP dla ${currency}...`;
+  try {
+    if (!cachedNbpRates[currency]) {
+      const res = await api('/nbp/rates');
+      if (res && res.rates) {
+        for (const item of res.rates) {
+          cachedNbpRates[item.code] = item.rate;
+        }
+      }
+    }
+    const rate = cachedNbpRates[currency];
+    if (rate) {
+      hintEl.textContent = `Aktualny średni kurs NBP: 1 ${currency} = ${rate.toFixed(4)} PLN`;
+    } else {
+      hintEl.textContent = `Kurs dla ${currency} zostanie zaktualizowany automatycznie podczas synchronizacji.`;
+    }
+  } catch (err) {
+    hintEl.textContent = `Średni kurs NBP dla ${currency} (pobierany automatycznie)`;
+  }
+}
+
+document.getElementById('prof-price-currency')?.addEventListener('change', function() {
+  updateNbpCurrencyHint(this.value);
+});
+
 document.getElementById('btn-save-profile').addEventListener('click', async () => {
   const id = document.getElementById('prof-id').value;
   const existing = state.profiles.find(x => x.id === id);
   const fixedStockVal = document.getElementById('prof-fixed-stock').value.trim();
+  const multiplierVal = parseFloat(document.getElementById('prof-price-multiplier').value) || 1.0;
+  const currencyVal = document.getElementById('prof-price-currency').value || 'PLN';
+
+  // Parse groupPriceModifiers lines
+  const groupLines = document.getElementById('prof-group-modifiers').value.split('\n');
+  const groupModifiers = {};
+  for (const line of groupLines) {
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.includes(':')) continue;
+    const parts = trimmed.split(':');
+    const groupName = parts[0].trim();
+    const modVal = parseFloat(parts[1].trim());
+    if (groupName && !isNaN(modVal) && modVal > 0) {
+      groupModifiers[groupName] = modVal;
+    }
+  }
 
   const profileData = {
     id: id || undefined,
@@ -419,6 +487,9 @@ document.getElementById('btn-save-profile').addEventListener('click', async () =
     identifierField: document.getElementById('prof-id-field').value,
     syncIntervalMinutes: parseInt(document.getElementById('prof-interval').value, 10) || 30,
     fixedStock: fixedStockVal !== '' ? parseInt(fixedStockVal, 10) : null,
+    priceMultiplier: multiplierVal,
+    priceCurrency: currencyVal,
+    groupPriceModifiers: Object.keys(groupModifiers).length > 0 ? groupModifiers : null,
     mapping: existing ? existing.mapping : {
       itemTag: 'product',
       identifierField: 'sku',
@@ -550,7 +621,7 @@ document.getElementById('btn-preview-mapping').addEventListener('click', async (
         <td>${item.price}</td>
         <td>${item.stock}</td>
         <td>${item.name || '-'}</td>
-        <td>${item.imageUrl ? `<a href="${item.imageUrl}" target="_blank" rel="noopener" style="color: var(--primary); text-decoration: underline;">URL zdjęcia</a>` : '-'}</td>
+        <td class="preview-img-cell">${item.imageUrl ? `<a href="${item.imageUrl}" target="_blank" rel="noopener" class="preview-img-link" title="${item.imageUrl}">🖼️ Podgląd URL</a>` : '-'}</td>
       </tr>
     `).join('');
   } catch (e) {
@@ -680,7 +751,7 @@ async function triggerApplyUpdate() {
   const btnBanner = document.getElementById('btn-banner-update');
   const btnSettings = document.getElementById('btn-settings-apply-update');
 
-  const confirmed = confirm('Czy na pewno chcesz pobrać najnowsze aktualizacje kodu i przebudować aplikację?');
+  const confirmed = confirm('Czy na pewno chcesz zaktualizować aplikację do najnowszej wersji?');
   if (!confirmed) return;
 
   try {
@@ -690,13 +761,36 @@ async function triggerApplyUpdate() {
     }
     if (btnSettings) {
       btnSettings.disabled = true;
-      btnSettings.textContent = 'Aktualizowanie i budowanie...';
+      btnSettings.textContent = 'Aktualizowanie...';
     }
 
-    showToast('Aktualizowanie aplikacji', 'Pobieranie najnowszego kodu i budowanie...', 'info');
+    showToast('Aktualizowanie aplikacji', 'Weryfikacja i przygotowywanie aktualizacji...', 'info');
 
     const result = await api('/updates/apply', { method: 'POST' });
 
+    if (result.needsRestart === false) {
+      // Wersja binarna / instalator (brak gita)
+      const downloadLink = result.downloadUrl || 'https://github.com/Yuriipe/stock_to_oms_sync/releases';
+      const msg = `Dostępny jest nowy instalator:<br><a href="${downloadLink}" target="_blank" rel="noopener noreferrer" style="font-weight: 600; display: inline-block; margin-top: 4px;">⬇️ Kliknij tutaj, aby pobrać nowy instalator</a>`;
+      showToast('Aktualizacja aplikacji', msg, 'success', 12000);
+
+      // Otwórz link do pobierania w nowej karcie / oknie
+      window.open(downloadLink, '_blank');
+
+      if (btnBanner) {
+        btnBanner.disabled = false;
+        btnBanner.textContent = '⬇️ Pobierz instalator';
+        btnBanner.onclick = () => window.open(downloadLink, '_blank');
+      }
+      if (btnSettings) {
+        btnSettings.disabled = false;
+        btnSettings.textContent = '⬇️ Pobierz najnowszy instalator';
+        btnSettings.onclick = () => window.open(downloadLink, '_blank');
+      }
+      return;
+    }
+
+    // Tryb repozytorium Git (git pull + npm run build)
     showToast('Aktualizacja powiodła się', `${result.message} Ponowne uruchamianie aplikacji...`, 'success');
 
     // Uruchomienie restartu

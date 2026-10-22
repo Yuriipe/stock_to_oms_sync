@@ -52,6 +52,7 @@ export interface UpdateApplyResult {
   previousCommit: string;
   newCommit: string;
   needsRestart: boolean;
+  downloadUrl?: string;
 }
 
 export class AppUpdateService {
@@ -309,7 +310,8 @@ export class AppUpdateService {
       const downloadLink = release?.downloadUrl || 'https://github.com/Yuriipe/stock_to_oms_sync/releases';
       return {
         success: true,
-        message: `Pobierz najnowszy instalator: ${downloadLink}`,
+        message: 'Dostępna nowa wersja instalatora.',
+        downloadUrl: downloadLink,
         previousCommit: 'installed',
         newCommit: release?.tagName || 'latest',
         needsRestart: false

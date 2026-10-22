@@ -12,6 +12,7 @@ import { FeedProfile } from '../types';
 import { AppUpdateService } from '../service/AppUpdateService';
 import { resolveLocalFilePath } from '../utils/fileResolver';
 import { fetchXmlSource } from '../utils/xmlFetcher';
+import { NbpRateService } from '../service/NbpRateService';
 
 export function createApiServer(
   db: DatabaseManager,
@@ -130,6 +131,16 @@ export function createApiServer(
         client.getInventoryPriceGroups()
       ]);
       res.json({ inventories, warehouses, priceGroups });
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // NBP Currency Exchange Rates
+  app.get('/api/nbp/rates', async (req, res) => {
+    try {
+      const rates = await NbpRateService.getAllRates();
+      res.json({ success: true, rates });
     } catch (e: unknown) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
     }
@@ -318,6 +329,24 @@ export function createApiServer(
           profile.sourcePath = resolved;
         }
       }
+
+      // If updating an existing profile that previously failed, reset the error badge
+      // so the user does not see a persistent "Błąd" after correcting the settings.
+      const existing = db.getProfileById(profile.id);
+      if (existing) {
+        const sourceChanged = existing.sourcePath !== profile.sourcePath ||
+                              existing.sourceType !== profile.sourceType ||
+                              existing.authHeader !== profile.authHeader;
+        if (sourceChanged || existing.lastSyncStatus === 'error') {
+          profile.lastSyncStatus = 'idle';
+          profile.lastSyncMessage = undefined;
+        } else {
+          profile.lastSyncStatus = existing.lastSyncStatus;
+          profile.lastSyncMessage = existing.lastSyncMessage;
+          profile.lastSyncAt = existing.lastSyncAt;
+        }
+      }
+
       db.saveProfile(profile);
       res.json({ success: true, profile: db.getProfileById(profile.id) });
     } catch (e: unknown) {

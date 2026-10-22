@@ -23,6 +23,9 @@ export interface FeedProfile {
   mapping: XmlFieldMapping;
   syncIntervalMinutes: number;
   fixedStock?: number | null;
+  priceMultiplier?: number | null;
+  priceCurrency?: string | null;
+  groupPriceModifiers?: Record<string, number> | null;
   lastSyncAt?: string;
   lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';
   lastSyncMessage?: string;

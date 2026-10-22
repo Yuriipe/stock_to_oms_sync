@@ -59,6 +59,9 @@ export class DatabaseManager {
         mappingJson TEXT NOT NULL,
         syncIntervalMinutes INTEGER NOT NULL DEFAULT 30,
         fixedStock INTEGER DEFAULT NULL,
+        priceMultiplier REAL DEFAULT 1.0,
+        priceCurrency TEXT DEFAULT 'PLN',
+        groupPriceModifiersJson TEXT DEFAULT NULL,
         lastSyncAt TEXT,
         lastSyncStatus TEXT,
         lastSyncMessage TEXT
@@ -67,6 +70,21 @@ export class DatabaseManager {
 
     try {
       this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN fixedStock INTEGER DEFAULT NULL`);
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN priceMultiplier REAL DEFAULT 1.0`);
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN priceCurrency TEXT DEFAULT 'PLN'`);
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN groupPriceModifiersJson TEXT DEFAULT NULL`);
     } catch {
       // Column may already exist
     }
@@ -175,29 +193,44 @@ export class DatabaseManager {
       mappingJson: string;
       syncIntervalMinutes: number;
       fixedStock?: number | null;
+      priceMultiplier?: number | null;
+      priceCurrency?: string | null;
+      groupPriceModifiersJson?: string | null;
       lastSyncAt?: string;
       lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';
       lastSyncMessage?: string;
     }>;
 
-    return rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      enabled: Boolean(r.enabled),
-      sourceType: r.sourceType,
-      sourcePath: r.sourcePath,
-      authHeader: r.authHeader || undefined,
-      targetInventoryId: r.targetInventoryId,
-      targetWarehouseId: r.targetWarehouseId,
-      targetPriceGroupId: r.targetPriceGroupId,
-      identifierField: r.identifierField,
-      mapping: JSON.parse(r.mappingJson),
-      syncIntervalMinutes: r.syncIntervalMinutes,
-      fixedStock: r.fixedStock !== null && r.fixedStock !== undefined ? Number(r.fixedStock) : undefined,
-      lastSyncAt: r.lastSyncAt || undefined,
-      lastSyncStatus: r.lastSyncStatus || undefined,
-      lastSyncMessage: r.lastSyncMessage || undefined
-    }));
+    return rows.map((r) => {
+      let groupPriceModifiers: Record<string, number> | undefined = undefined;
+      if (r.groupPriceModifiersJson) {
+        try {
+          groupPriceModifiers = JSON.parse(r.groupPriceModifiersJson);
+        } catch {}
+      }
+
+      return {
+        id: r.id,
+        name: r.name,
+        enabled: Boolean(r.enabled),
+        sourceType: r.sourceType,
+        sourcePath: r.sourcePath,
+        authHeader: r.authHeader || undefined,
+        targetInventoryId: r.targetInventoryId,
+        targetWarehouseId: r.targetWarehouseId,
+        targetPriceGroupId: r.targetPriceGroupId,
+        identifierField: r.identifierField,
+        mapping: JSON.parse(r.mappingJson),
+        syncIntervalMinutes: r.syncIntervalMinutes,
+        fixedStock: r.fixedStock !== null && r.fixedStock !== undefined ? Number(r.fixedStock) : undefined,
+        priceMultiplier: r.priceMultiplier !== null && r.priceMultiplier !== undefined ? Number(r.priceMultiplier) : 1.0,
+        priceCurrency: r.priceCurrency || 'PLN',
+        groupPriceModifiers: groupPriceModifiers || undefined,
+        lastSyncAt: r.lastSyncAt || undefined,
+        lastSyncStatus: r.lastSyncStatus || undefined,
+        lastSyncMessage: r.lastSyncMessage || undefined
+      };
+    });
   }
 
   public getProfileById(id: string): FeedProfile | null {
@@ -215,12 +248,22 @@ export class DatabaseManager {
       mappingJson: string;
       syncIntervalMinutes: number;
       fixedStock?: number | null;
+      priceMultiplier?: number | null;
+      priceCurrency?: string | null;
+      groupPriceModifiersJson?: string | null;
       lastSyncAt?: string;
       lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';
       lastSyncMessage?: string;
     } | undefined;
 
     if (!row) return null;
+
+    let groupPriceModifiers: Record<string, number> | undefined = undefined;
+    if (row.groupPriceModifiersJson) {
+      try {
+        groupPriceModifiers = JSON.parse(row.groupPriceModifiersJson);
+      } catch {}
+    }
 
     return {
       id: row.id,
@@ -236,6 +279,9 @@ export class DatabaseManager {
       mapping: JSON.parse(row.mappingJson),
       syncIntervalMinutes: row.syncIntervalMinutes,
       fixedStock: row.fixedStock !== null && row.fixedStock !== undefined ? Number(row.fixedStock) : undefined,
+      priceMultiplier: row.priceMultiplier !== null && row.priceMultiplier !== undefined ? Number(row.priceMultiplier) : 1.0,
+      priceCurrency: row.priceCurrency || 'PLN',
+      groupPriceModifiers: groupPriceModifiers || undefined,
       lastSyncAt: row.lastSyncAt || undefined,
       lastSyncStatus: row.lastSyncStatus || undefined,
       lastSyncMessage: row.lastSyncMessage || undefined
@@ -248,8 +294,9 @@ export class DatabaseManager {
         id, name, enabled, sourceType, sourcePath, authHeader,
         targetInventoryId, targetWarehouseId, targetPriceGroupId,
         identifierField, mappingJson, syncIntervalMinutes, fixedStock,
+        priceMultiplier, priceCurrency, groupPriceModifiersJson,
         lastSyncAt, lastSyncStatus, lastSyncMessage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         enabled = excluded.enabled,
@@ -263,6 +310,9 @@ export class DatabaseManager {
         mappingJson = excluded.mappingJson,
         syncIntervalMinutes = excluded.syncIntervalMinutes,
         fixedStock = excluded.fixedStock,
+        priceMultiplier = excluded.priceMultiplier,
+        priceCurrency = excluded.priceCurrency,
+        groupPriceModifiersJson = excluded.groupPriceModifiersJson,
         lastSyncAt = excluded.lastSyncAt,
         lastSyncStatus = excluded.lastSyncStatus,
         lastSyncMessage = excluded.lastSyncMessage
@@ -282,6 +332,9 @@ export class DatabaseManager {
       JSON.stringify(profile.mapping),
       profile.syncIntervalMinutes,
       profile.fixedStock !== undefined && profile.fixedStock !== null ? Number(profile.fixedStock) : null,
+      profile.priceMultiplier !== undefined && profile.priceMultiplier !== null ? Number(profile.priceMultiplier) : 1.0,
+      profile.priceCurrency || 'PLN',
+      profile.groupPriceModifiers ? JSON.stringify(profile.groupPriceModifiers) : null,
       profile.lastSyncAt || null,
       profile.lastSyncStatus || null,
       profile.lastSyncMessage || null
