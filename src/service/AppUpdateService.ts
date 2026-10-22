@@ -1,8 +1,10 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import fs from 'fs';
+import https from 'https';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 /**
  * Returns environment variables with guaranteed Windows system variables (ComSpec, SystemRoot, PATH)
@@ -40,6 +42,8 @@ export interface UpdateStatus {
   commitsBehind: number;
   commitMessages: string[];
   lastCheckedAt: string;
+  downloadUrl?: string;
+  releaseTag?: string;
 }
 
 export interface UpdateApplyResult {
@@ -57,76 +61,196 @@ export class AppUpdateService {
     this.repoDir = repoDir;
   }
 
-  private buildRemoteTarget(branch: string, token?: string, repoUrl?: string): string {
-    if (token) {
-      const cleanToken = encodeURIComponent(token.trim());
-      let cleanUrl = (repoUrl || '').trim();
-
-      // If repoUrl not provided or starts with origin, look up git remote url
-      if (!cleanUrl || cleanUrl === 'origin') {
-        cleanUrl = 'https://github.com/Yuriipe/stock_to_oms_sync.git';
-      }
-
-      // Convert https://github.com/owner/repo.git to https://x-access-token:<token>@github.com/owner/repo.git
-      if (cleanUrl.startsWith('https://')) {
-        const withoutHttps = cleanUrl.replace(/^https:\/\/[^@]*@?/, '');
-        const authenticatedUrl = `https://x-access-token:${cleanToken}@${withoutHttps}`;
-        return `"${authenticatedUrl}" ${branch}`;
-      }
+  private isGitRepository(): boolean {
+    try {
+      return fs.existsSync(path.join(this.repoDir, '.git'));
+    } catch {
+      return false;
     }
-    return `origin ${branch}`;
+  }
+
+  private getCurrentPackageVersion(): string {
+    try {
+      const pkgPath = path.join(this.repoDir, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        return pkg.version || '1.0.0';
+      }
+    } catch {}
+    return '1.0.0';
+  }
+
+  private async fetchLatestGitHubRelease(token?: string, repoUrl?: string): Promise<{
+    tagName: string;
+    body: string;
+    downloadUrl?: string;
+  } | null> {
+    return new Promise((resolve) => {
+      let repoOwner = 'Yuriipe';
+      let repoName = 'stock_to_oms_sync';
+
+      if (repoUrl && repoUrl.includes('github.com/')) {
+        const parts = repoUrl.split('github.com/')[1].replace(/\.git$/, '').split('/');
+        if (parts.length >= 2) {
+          repoOwner = parts[0];
+          repoName = parts[1];
+        }
+      }
+
+      const headers: Record<string, string> = {
+        'User-Agent': 'XMLsync-UpdateService',
+        'Accept': 'application/vnd.github.v3+json'
+      };
+      if (token) {
+        headers['Authorization'] = `token ${token.trim()}`;
+      }
+
+      const req = https.get(
+        {
+          hostname: 'api.github.com',
+          path: `/repos/${repoOwner}/${repoName}/releases/latest`,
+          headers,
+          timeout: 15000
+        },
+        (res) => {
+          let raw = '';
+          res.on('data', (chunk) => (raw += chunk));
+          res.on('end', () => {
+            if (res.statusCode === 200) {
+              try {
+                const data = JSON.parse(raw);
+                let downloadUrl: string | undefined = undefined;
+                if (data.assets && Array.isArray(data.assets)) {
+                  const exeAsset = data.assets.find((a: any) => a.name && a.name.endsWith('.exe'));
+                  if (exeAsset) {
+                    downloadUrl = exeAsset.browser_download_url;
+                  }
+                }
+                resolve({
+                  tagName: data.tag_name || '',
+                  body: data.body || '',
+                  downloadUrl: downloadUrl || data.html_url
+                });
+              } catch {
+                resolve(null);
+              }
+            } else {
+              resolve(null);
+            }
+          });
+        }
+      );
+
+      req.on('error', () => resolve(null));
+      req.setTimeout(15000, () => {
+        req.destroy();
+        resolve(null);
+      });
+    });
   }
 
   /**
-   * Checks the remote Git repository for updates on the active branch
+   * Checks the remote Git repository or GitHub Releases for updates
    */
   public async checkForUpdates(options?: { token?: string; repoUrl?: string }): Promise<UpdateStatus> {
+    const hasGit = this.isGitRepository();
+
+    // 1. If not a git clone (e.g. installed Windows desktop app), check GitHub Releases API
+    if (!hasGit) {
+      const currentVersion = this.getCurrentPackageVersion();
+      const release = await this.fetchLatestGitHubRelease(options?.token, options?.repoUrl);
+
+      if (!release) {
+        return {
+          currentCommit: `v${currentVersion}`,
+          currentShortCommit: `v${currentVersion}`,
+          remoteCommit: `v${currentVersion}`,
+          remoteShortCommit: `v${currentVersion}`,
+          branch: 'release',
+          hasUpdate: false,
+          commitsBehind: 0,
+          commitMessages: [],
+          lastCheckedAt: new Date().toISOString()
+        };
+      }
+
+      const remoteTag = release.tagName.replace(/^v/, '');
+      const hasUpdate = remoteTag !== currentVersion && remoteTag > currentVersion;
+
+      return {
+        currentCommit: `v${currentVersion}`,
+        currentShortCommit: `v${currentVersion}`,
+        remoteCommit: release.tagName,
+        remoteShortCommit: release.tagName,
+        branch: 'release',
+        hasUpdate,
+        commitsBehind: hasUpdate ? 1 : 0,
+        commitMessages: release.body ? [release.body.slice(0, 150)] : [],
+        lastCheckedAt: new Date().toISOString(),
+        downloadUrl: release.downloadUrl,
+        releaseTag: release.tagName
+      };
+    }
+
+    // 2. In a git repository: run git commands directly with execFile (avoiding cmd.exe ENOENT)
     try {
       const execEnv = getExecEnv({ GIT_TERMINAL_PROMPT: '0' });
 
-      // 1. Get current branch
-      const { stdout: branchOut } = await execAsync('git rev-parse --abbrev-ref HEAD', {
+      // Branch
+      const { stdout: branchOut } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
         cwd: this.repoDir,
         env: execEnv
       });
       const branch = branchOut.trim() || 'main';
 
-      // 2. Fetch origin (using token if supplied, with GIT_TERMINAL_PROMPT=0 to prevent hanging)
-      const fetchTarget = this.buildRemoteTarget(branch, options?.token, options?.repoUrl);
-      await execAsync(`git fetch ${fetchTarget}`, {
+      // Remote URL & fetch
+      let remoteTarget = 'origin';
+      if (options?.token) {
+        const cleanToken = encodeURIComponent(options.token.trim());
+        let cleanUrl = (options.repoUrl || '').trim();
+        if (!cleanUrl || cleanUrl === 'origin') {
+          cleanUrl = 'https://github.com/Yuriipe/stock_to_oms_sync.git';
+        }
+        if (cleanUrl.startsWith('https://')) {
+          const withoutHttps = cleanUrl.replace(/^https:\/\/[^@]*@?/, '');
+          remoteTarget = `https://x-access-token:${cleanToken}@${withoutHttps}`;
+        }
+      }
+
+      await execFileAsync('git', ['fetch', remoteTarget, branch], {
         cwd: this.repoDir,
         env: execEnv,
         timeout: 25000
       });
 
-      // 3. Local commit hash
-      const { stdout: localOut } = await execAsync('git rev-parse HEAD', {
+      // Local commit
+      const { stdout: localOut } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
         cwd: this.repoDir,
         env: execEnv
       });
       const currentCommit = localOut.trim();
 
-      // 4. Remote commit hash (FETCH_HEAD is always updated by git fetch)
-      const { stdout: remoteOut } = await execAsync(`git rev-parse FETCH_HEAD`, {
+      // Remote commit
+      const { stdout: remoteOut } = await execFileAsync('git', ['rev-parse', 'FETCH_HEAD'], {
         cwd: this.repoDir,
         env: execEnv
       });
       const remoteCommit = remoteOut.trim();
 
-      // 5. Commits behind count
-      const { stdout: countOut } = await execAsync(
-        `git rev-list --count HEAD..FETCH_HEAD`,
-        { cwd: this.repoDir, env: execEnv }
-      );
+      // Commits behind count
+      const { stdout: countOut } = await execFileAsync('git', ['rev-list', '--count', 'HEAD..FETCH_HEAD'], {
+        cwd: this.repoDir,
+        env: execEnv
+      });
       const commitsBehind = parseInt(countOut.trim(), 10) || 0;
 
-      // 6. Detailed log messages if behind
+      // Commit log messages
       let commitMessages: string[] = [];
       if (commitsBehind > 0) {
-        const { stdout: logOut } = await execAsync(
-          `git log HEAD..FETCH_HEAD --oneline -n 10`,
-          { cwd: this.repoDir, env: execEnv }
-        );
+        const { stdout: logOut } = await execFileAsync('git', ['log', 'HEAD..FETCH_HEAD', '--oneline', '-n', '10'], {
+          cwd: this.repoDir,
+          env: execEnv
+        });
         commitMessages = logOut
           .split('\n')
           .map((line) => line.trim())
@@ -149,11 +273,27 @@ export class AppUpdateService {
       if (errMsg.includes('could not read Username') || errMsg.includes('Authentication failed')) {
         throw new Error('Authentication required for private repository. Please configure a GitHub Personal Access Token in Settings.');
       }
-      if (errMsg.includes('ENOENT') && errMsg.includes('cmd.exe')) {
-        throw new Error('System command interpreter (cmd.exe) could not be found or executed. Verify Windows System32 permissions.');
-      }
-      if (errMsg.includes('ENOENT') || errMsg.includes('git is not recognized') || errMsg.includes('not found')) {
-        throw new Error('Git was not found on this system. Please install Git for Windows (https://git-scm.com) and ensure it is in the system PATH.');
+      if (errMsg.includes('ENOENT')) {
+        // Fallback to checking GitHub release directly if git binary cannot be found
+        const currentVersion = this.getCurrentPackageVersion();
+        const release = await this.fetchLatestGitHubRelease(options?.token, options?.repoUrl);
+        if (release) {
+          const remoteTag = release.tagName.replace(/^v/, '');
+          const hasUpdate = remoteTag !== currentVersion && remoteTag > currentVersion;
+          return {
+            currentCommit: `v${currentVersion}`,
+            currentShortCommit: `v${currentVersion}`,
+            remoteCommit: release.tagName,
+            remoteShortCommit: release.tagName,
+            branch: 'release',
+            hasUpdate,
+            commitsBehind: hasUpdate ? 1 : 0,
+            commitMessages: release.body ? [release.body.slice(0, 150)] : [],
+            lastCheckedAt: new Date().toISOString(),
+            downloadUrl: release.downloadUrl,
+            releaseTag: release.tagName
+          };
+        }
       }
       throw new Error(`Failed to check for updates: ${errMsg}`);
     }
@@ -163,37 +303,63 @@ export class AppUpdateService {
    * Pulls the latest code, rebuilds TypeScript, and returns update result
    */
   public async applyUpdate(options?: { token?: string; repoUrl?: string }): Promise<UpdateApplyResult> {
+    const hasGit = this.isGitRepository();
+    if (!hasGit) {
+      const release = await this.fetchLatestGitHubRelease(options?.token, options?.repoUrl);
+      const downloadLink = release?.downloadUrl || 'https://github.com/Yuriipe/stock_to_oms_sync/releases';
+      return {
+        success: true,
+        message: `Pobierz najnowszy instalator: ${downloadLink}`,
+        previousCommit: 'installed',
+        newCommit: release?.tagName || 'latest',
+        needsRestart: false
+      };
+    }
+
     try {
       const execEnv = getExecEnv({ GIT_TERMINAL_PROMPT: '0' });
 
-      const { stdout: branchOut } = await execAsync('git rev-parse --abbrev-ref HEAD', {
+      const { stdout: branchOut } = await execFileAsync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
         cwd: this.repoDir,
         env: execEnv
       });
       const branch = branchOut.trim() || 'main';
 
-      const { stdout: prevOut } = await execAsync('git rev-parse HEAD', {
+      const { stdout: prevOut } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
         cwd: this.repoDir,
         env: execEnv
       });
       const previousCommit = prevOut.trim();
 
-      // Pull updates (authenticated if token provided)
-      const pullTarget = this.buildRemoteTarget(branch, options?.token, options?.repoUrl);
-      await execAsync(`git pull ${pullTarget}`, {
+      // Remote target
+      let remoteTarget = 'origin';
+      if (options?.token) {
+        const cleanToken = encodeURIComponent(options.token.trim());
+        let cleanUrl = (options.repoUrl || '').trim();
+        if (!cleanUrl || cleanUrl === 'origin') {
+          cleanUrl = 'https://github.com/Yuriipe/stock_to_oms_sync.git';
+        }
+        if (cleanUrl.startsWith('https://')) {
+          const withoutHttps = cleanUrl.replace(/^https:\/\/[^@]*@?/, '');
+          remoteTarget = `https://x-access-token:${cleanToken}@${withoutHttps}`;
+        }
+      }
+
+      await execFileAsync('git', ['pull', remoteTarget, branch], {
         cwd: this.repoDir,
         env: execEnv,
         timeout: 45000
       });
 
       // Recompile TypeScript
-      await execAsync('npm run build', {
+      const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+      await execFileAsync(npmCmd, ['run', 'build'], {
         cwd: this.repoDir,
         env: execEnv,
         timeout: 60000
       });
 
-      const { stdout: newOut } = await execAsync('git rev-parse HEAD', {
+      const { stdout: newOut } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
         cwd: this.repoDir,
         env: execEnv
       });
@@ -201,7 +367,7 @@ export class AppUpdateService {
 
       return {
         success: true,
-        message: 'Application updated and rebuilt successfully!',
+        message: 'Aplikacja została zaktualizowana i przebudowana pomyślnie!',
         previousCommit: previousCommit.slice(0, 7),
         newCommit: newCommit.slice(0, 7),
         needsRestart: true
@@ -223,7 +389,6 @@ export class AppUpdateService {
       electronApp.relaunch();
       electronApp.exit(0);
     } else {
-      // Fallback for standalone/dev server mode
       setTimeout(() => {
         process.exit(0);
       }, 500);

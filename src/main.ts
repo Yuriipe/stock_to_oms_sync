@@ -2,10 +2,80 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } from 'el
 import path from 'path';
 import { DatabaseManager } from './storage/DatabaseManager';
 import { createApiServer } from './server/app';
+import { registerBrowserFetcher } from './utils/xmlFetcher';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let isQuitting = false;
+
+// Register Electron background browser engine to bypass Cloudflare / Akamai TLS fingerprint checks
+registerBrowserFetcher(async (targetUrl: string, customHeaders?: Record<string, string>) => {
+  return new Promise<string>((resolve, reject) => {
+    let finished = false;
+    const hiddenWin = new BrowserWindow({
+      show: false,
+      width: 800,
+      height: 600,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    const timer = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        try { hiddenWin.destroy(); } catch {}
+        reject(new Error(`Przekroczono limit czasu (60s) podczas ładowania ${targetUrl} przez przeglądarkę`));
+      }
+    }, 60000);
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      try {
+        if (!hiddenWin.isDestroyed()) hiddenWin.destroy();
+      } catch {}
+    };
+
+    hiddenWin.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+      if (customHeaders) {
+        Object.assign(details.requestHeaders, customHeaders);
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    });
+
+    hiddenWin.webContents.on('did-finish-load', async () => {
+      if (finished) return;
+      try {
+        const rawContent = await hiddenWin.webContents.executeJavaScript(
+          `document.body ? (document.body.innerText || document.documentElement.outerHTML) : document.documentElement.outerHTML`
+        );
+        finished = true;
+        cleanup();
+        resolve(rawContent);
+      } catch (err) {
+        finished = true;
+        cleanup();
+        reject(err);
+      }
+    });
+
+    hiddenWin.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(new Error(`Błąd ładowania strony (${errorCode}): ${errorDescription}`));
+    });
+
+    hiddenWin.loadURL(targetUrl).catch((err) => {
+      if (!finished) {
+        finished = true;
+        cleanup();
+        reject(err);
+      }
+    });
+  });
+});
 
 const db = new DatabaseManager(path.join(app.getPath('userData'), 'boltline.sqlite'));
 db.initialize();

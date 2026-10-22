@@ -3,6 +3,7 @@ import axios from 'axios';
 import { DatabaseManager } from '../storage/DatabaseManager';
 import { BaseLinkerClient } from '../baselinker/BaseLinkerClient';
 import { resolveLocalFilePath } from '../utils/fileResolver';
+import { fetchXmlSource } from '../utils/xmlFetcher';
 import { XmlParserService } from '../parser/XmlParserService';
 import { DiffEngine } from '../diff/DiffEngine';
 import { FeedProfile } from '../types';
@@ -28,28 +29,12 @@ export class SyncCoordinator {
   }
 
   private async loadXmlContent(profile: FeedProfile): Promise<string> {
-    if (profile.sourceType === 'file') {
-      const resolvedPath = resolveLocalFilePath(profile.sourcePath);
-      if (!resolvedPath) {
-        throw new Error(`Local file not found: ${profile.sourcePath}`);
-      }
-      return fs.readFileSync(resolvedPath, 'utf-8');
-    } else {
-      const headers: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9,pl;q=0.8'
-      };
-      if (profile.authHeader) {
-        headers['Authorization'] = profile.authHeader;
-      }
-      const response = await axios.get(profile.sourcePath, {
-        headers,
-        timeout: 60000,
-        responseType: 'text'
-      });
-      return response.data;
-    }
+    return fetchXmlSource({
+      sourceType: profile.sourceType,
+      sourcePath: profile.sourcePath,
+      authHeader: profile.authHeader,
+      timeoutMs: 60000
+    });
   }
 
   public async syncProfile(profileId: string): Promise<SyncExecutionResult> {

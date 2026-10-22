@@ -11,6 +11,7 @@ import { DiffEngine } from '../diff/DiffEngine';
 import { FeedProfile } from '../types';
 import { AppUpdateService } from '../service/AppUpdateService';
 import { resolveLocalFilePath } from '../utils/fileResolver';
+import { fetchXmlSource } from '../utils/xmlFetcher';
 
 export function createApiServer(
   db: DatabaseManager,
@@ -140,21 +141,13 @@ export function createApiServer(
       const { sourceType, sourcePath, authHeader, sampleXml } = req.body;
       let xmlContent = sampleXml;
 
-      if (!xmlContent && sourceType === 'url' && sourcePath) {
-        const headers: Record<string, string> = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9,pl;q=0.8'
-        };
-        if (authHeader) headers['Authorization'] = authHeader;
-        const response = await axios.get(sourcePath, { headers, timeout: 20000, responseType: 'text' });
-        xmlContent = response.data;
-      } else if (!xmlContent && sourceType === 'file' && sourcePath) {
-        const resolvedPath = resolveLocalFilePath(sourcePath);
-        if (!resolvedPath) {
-          return res.status(400).json({ error: `File not found: ${sourcePath}` });
-        }
-        xmlContent = fs.readFileSync(resolvedPath, 'utf-8');
+      if (!xmlContent && sourcePath) {
+        xmlContent = await fetchXmlSource({
+          sourceType: sourceType || 'file',
+          sourcePath,
+          authHeader,
+          timeoutMs: 25000
+        });
       }
 
       if (!xmlContent) {
@@ -177,21 +170,13 @@ export function createApiServer(
       const { sourceType, sourcePath, authHeader, sampleXml, mapping } = req.body;
       let xmlContent = sampleXml;
 
-      if (!xmlContent && sourceType === 'url' && sourcePath) {
-        const headers: Record<string, string> = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9,pl;q=0.8'
-        };
-        if (authHeader) headers['Authorization'] = authHeader;
-        const response = await axios.get(sourcePath, { headers, timeout: 20000, responseType: 'text' });
-        xmlContent = response.data;
-      } else if (!xmlContent && sourceType === 'file' && sourcePath) {
-        const resolvedPath = resolveLocalFilePath(sourcePath);
-        if (!resolvedPath) {
-          return res.status(400).json({ error: `File not found: ${sourcePath}` });
-        }
-        xmlContent = fs.readFileSync(resolvedPath, 'utf-8');
+      if (!xmlContent && sourcePath) {
+        xmlContent = await fetchXmlSource({
+          sourceType: sourceType || 'file',
+          sourcePath,
+          authHeader,
+          timeoutMs: 25000
+        });
       }
 
       if (!xmlContent || !mapping) {
