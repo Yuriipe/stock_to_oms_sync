@@ -11,9 +11,10 @@ export class DiffEngine {
 
   public calculateDeltas(profileId: string, items: SupplierParsedItem[]): ProductDelta[] {
     const deltas: ProductDelta[] = [];
+    const cacheMap = this.db.getProfileCacheMap(profileId);
 
     for (const item of items) {
-      const cached = this.db.getCacheEntry(profileId, item.identifier);
+      const cached = cacheMap.get(item.identifier) || null;
 
       const hasPriceChange = cached === null || cached.lastPrice !== item.price;
       const hasStockChange = cached === null || cached.lastStock !== item.stock;
@@ -37,8 +38,14 @@ export class DiffEngine {
   }
 
   public commitDeltas(profileId: string, deltas: ProductDelta[]): void {
-    for (const delta of deltas) {
-      this.db.updateCacheEntry(profileId, delta.identifier, delta.newPrice, delta.newStock);
-    }
+    if (deltas.length === 0) return;
+    this.db.batchUpdateCacheEntries(
+      profileId,
+      deltas.map(d => ({
+        identifier: d.identifier,
+        price: d.newPrice,
+        stock: d.newStock
+      }))
+    );
   }
 }

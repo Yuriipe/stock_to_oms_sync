@@ -38,7 +38,14 @@ export class SyncCoordinator {
     });
   }
 
-  public async syncProfile(profileId: string): Promise<SyncExecutionResult> {
+  /**
+   * Helper to yield to Node/Electron event loop, allowing UI and system events to breathe
+   */
+  private async yieldEventLoop(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+
+  public async syncProfile(profileId: string, options?: { forceCatalogRefresh?: boolean }): Promise<SyncExecutionResult> {
     const profile = this.db.getProfileById(profileId);
     if (!profile) {
       throw new Error(`Profile not found: ${profileId}`);
@@ -55,6 +62,9 @@ export class SyncCoordinator {
       // 1. Fetch XML
       const xmlData = await this.loadXmlContent(profile);
 
+      // Yield event loop before heavy parsing
+      await this.yieldEventLoop();
+
       // 2. Parse items using profile mapping
       const items = this.xmlParser.parseXml(xmlData, profile.mapping);
       if (items.length === 0) {
@@ -70,11 +80,14 @@ export class SyncCoordinator {
         };
       }
 
+      await this.yieldEventLoop();
+
       // Apply fixed stock override if configured for this profile
       if (profile.fixedStock !== undefined && profile.fixedStock !== null) {
         const fixedVal = Number(profile.fixedStock);
-        for (const item of items) {
-          item.stock = fixedVal;
+        for (let i = 0; i < items.length; i++) {
+          items[i].stock = fixedVal;
+          if (i % 2500 === 0) await this.yieldEventLoop();
         }
       }
 
@@ -92,26 +105,38 @@ export class SyncCoordinator {
         }
       }
 
-      for (const item of items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
         if (typeof item.price === 'number' && !isNaN(item.price) && item.price > 0) {
           // Calculation: sourcePrice * exchangeRate * multiplier
           const modified = item.price * exchangeRate * multiplier;
           item.price = Math.round(modified * 100) / 100;
         }
+        if (i % 2500 === 0) await this.yieldEventLoop();
       }
 
       // 3. Match against BaseLinker product IDs using local DB cache
-      // Reconcile with BaseLinker to ensure products deleted in Base are removed and new ones discovered
-      try {
-        const fetchedProducts = await client.fetchAllInventoryProducts(profile.targetInventoryId);
-        this.db.syncBaseProducts(profile.targetInventoryId, fetchedProducts);
-      } catch (fetchErr) {
-        console.warn(
-          `Could not refresh BaseLinker products for inventory ${profile.targetInventoryId}, falling back to local cache:`,
-          fetchErr
-        );
-        if (this.db.getBaseProductsCount(profile.targetInventoryId) === 0) {
-          throw fetchErr;
+      // Refresh full catalog from BaseLinker if:
+      // a) Explicitly requested (e.g. manual refresh in UI or forceCatalogRefresh)
+      // b) No products exist in local DB cache yet
+      // c) Last catalog reconciliation was more than 12 hours ago
+      const cachedProductsCount = this.db.getBaseProductsCount(profile.targetInventoryId);
+      const lastCatalogSyncAt = this.db.getLastCatalogSyncAt(profile.targetInventoryId);
+      const isCatalogStale = !lastCatalogSyncAt || (Date.now() - new Date(lastCatalogSyncAt).getTime() > 12 * 60 * 60 * 1000);
+      const shouldRefreshCatalog = options?.forceCatalogRefresh || cachedProductsCount === 0 || isCatalogStale;
+
+      if (shouldRefreshCatalog) {
+        try {
+          const fetchedProducts = await client.fetchAllInventoryProducts(profile.targetInventoryId);
+          this.db.syncBaseProducts(profile.targetInventoryId, fetchedProducts);
+        } catch (fetchErr) {
+          console.warn(
+            `Could not refresh BaseLinker products for inventory ${profile.targetInventoryId}, falling back to local cache:`,
+            fetchErr
+          );
+          if (this.db.getBaseProductsCount(profile.targetInventoryId) === 0) {
+            throw fetchErr;
+          }
         }
       }
 
@@ -124,7 +149,9 @@ export class SyncCoordinator {
       // 4. Auto-create products in BaseLinker or update images if product already exists without images
       let createdCount = 0;
       let imagesUpdatedCount = 0;
-      for (const item of items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (i % 1000 === 0) await this.yieldEventLoop();
         const existingInfos = blProductInfoMultiMap.get(item.identifier);
         if (!existingInfos || existingInfos.length === 0) {
           try {

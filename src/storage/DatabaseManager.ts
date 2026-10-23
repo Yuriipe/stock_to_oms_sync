@@ -135,6 +135,14 @@ export class DatabaseManager {
         message TEXT
       );
     `);
+
+    // Track catalog synchronization timestamp per inventory
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS inventory_catalog_meta (
+        inventoryId INTEGER PRIMARY KEY,
+        lastCatalogSyncAt TEXT NOT NULL
+      );
+    `);
   }
 
   public getSettings(): AppSettings {
@@ -384,6 +392,21 @@ export class DatabaseManager {
     };
   }
 
+  public getProfileCacheMap(profileId: string): Map<string, { lastPrice?: number; lastStock?: number }> {
+    const rows = this.db.prepare(`
+      SELECT identifier, lastPrice, lastStock FROM sync_cache WHERE profileId = ?
+    `).all(profileId) as Array<{ identifier: string; lastPrice: number | null; lastStock: number | null }>;
+
+    const map = new Map<string, { lastPrice?: number; lastStock?: number }>();
+    for (const r of rows) {
+      map.set(r.identifier, {
+        lastPrice: r.lastPrice ?? undefined,
+        lastStock: r.lastStock ?? undefined
+      });
+    }
+    return map;
+  }
+
   public updateCacheEntry(profileId: string, identifier: string, price?: number, stock?: number): void {
     this.db.prepare(`
       INSERT INTO sync_cache (profileId, identifier, lastPrice, lastStock, lastSeenAt)
@@ -393,6 +416,30 @@ export class DatabaseManager {
         lastStock = COALESCE(excluded.lastStock, sync_cache.lastStock),
         lastSeenAt = excluded.lastSeenAt
     `).run(profileId, identifier, price ?? null, stock ?? null, new Date().toISOString());
+  }
+
+  public batchUpdateCacheEntries(
+    profileId: string,
+    entries: Array<{ identifier: string; price?: number; stock?: number }>
+  ): void {
+    if (entries.length === 0) return;
+    const now = new Date().toISOString();
+    const stmt = this.db.prepare(`
+      INSERT INTO sync_cache (profileId, identifier, lastPrice, lastStock, lastSeenAt)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(profileId, identifier) DO UPDATE SET
+        lastPrice = COALESCE(excluded.lastPrice, sync_cache.lastPrice),
+        lastStock = COALESCE(excluded.lastStock, sync_cache.lastStock),
+        lastSeenAt = excluded.lastSeenAt
+    `);
+
+    const updateMany = this.db.transaction((items: Array<{ identifier: string; price?: number; stock?: number }>) => {
+      for (const item of items) {
+        stmt.run(profileId, item.identifier, item.price ?? null, item.stock ?? null, now);
+      }
+    });
+
+    updateMany(entries);
   }
 
   public close(): void {
@@ -581,6 +628,7 @@ export class DatabaseManager {
     });
 
     runSync();
+    this.setLastCatalogSyncAt(inventoryId, now);
     return { updated: validProducts.length, deleted: deletedCount };
   }
 
@@ -595,6 +643,19 @@ export class DatabaseManager {
       WHERE inventoryId = ? AND (sku IS NULL OR trim(sku) = '') AND (ean IS NULL OR trim(ean) = '')
     `).run(inventoryId);
     return res.changes;
+  }
+
+  public getLastCatalogSyncAt(inventoryId: number): string | null {
+    const row = this.db.prepare('SELECT lastCatalogSyncAt FROM inventory_catalog_meta WHERE inventoryId = ?').get(inventoryId) as { lastCatalogSyncAt: string } | undefined;
+    return row?.lastCatalogSyncAt || null;
+  }
+
+  public setLastCatalogSyncAt(inventoryId: number, timestamp: string = new Date().toISOString()): void {
+    this.db.prepare(`
+      INSERT INTO inventory_catalog_meta (inventoryId, lastCatalogSyncAt)
+      VALUES (?, ?)
+      ON CONFLICT(inventoryId) DO UPDATE SET lastCatalogSyncAt = excluded.lastCatalogSyncAt
+    `).run(inventoryId, timestamp);
   }
 
   public saveSingleBaseProduct(inventoryId: number, productId: number, sku?: string, ean?: string, hasImages?: boolean): void {

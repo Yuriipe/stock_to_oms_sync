@@ -4,6 +4,8 @@ Local automation tool designed to run directly on Windows to synchronize multipl
 
 ## Features
 
+- **High-Volume XML Performance & Zero-Freeze Architecture:** Optimized for multi-feed catalogs (>10,000–50,000 products). Uses single-query in-memory SQLite diffing, batch transactions, and micro-task event loop yielding (`setImmediate`) to keep Windows and Electron UI completely fluid and responsive.
+- **Smart Catalog Caching & Fast Stock Sync:** Stores BaseLinker inventory catalog IDs, SKUs, and EANs locally. Routine periodic syncs only calculate and dispatch delta stock/prices without refetching the entire BaseLinker catalog across API pages, eliminating network congestion and API rate spikes.
 - **Dynamic BaseLinker Hierarchy Discovery:** Fetches inventories, multi-warehouse accounts, and price groups directly via your BaseLinker API token.
 - **Strict Rate Limiting (< 50 QPM):** Built-in query throttling guarantees API calls remain safely below BaseLinker's 50 requests/minute quota.
 - **Local BaseLinker Products SQLite Cache & Viewer:** Caches BaseLinker product IDs, SKUs, and EANs with full pagination (`getInventoryProductsList`) to avoid repetitive catalog lookups. Includes an in-dashboard modal with on-demand **"🔄 Refresh from BaseLinker"** capability.

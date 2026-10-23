@@ -367,7 +367,8 @@ export function createApiServer(
   // Trigger Sync for Profile
   app.post('/api/profiles/:id/sync', async (req, res) => {
     try {
-      const result = await syncCoordinator.syncProfile(req.params.id);
+      const forceRefresh = req.query.forceRefresh === 'true' || req.body?.forceCatalogRefresh === true;
+      const result = await syncCoordinator.syncProfile(req.params.id, { forceCatalogRefresh: forceRefresh });
       res.json(result);
     } catch (e: unknown) {
       res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
