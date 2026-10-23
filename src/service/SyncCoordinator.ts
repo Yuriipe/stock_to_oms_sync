@@ -9,6 +9,8 @@ import { DiffEngine } from '../diff/DiffEngine';
 import { FeedProfile } from '../types';
 import { NbpRateService } from './NbpRateService';
 
+import { calculateModifiedPrice } from '../utils/priceCalculator';
+
 export interface SyncExecutionResult {
   profileId: string;
   success: boolean;
@@ -22,11 +24,47 @@ export class SyncCoordinator {
   private db: DatabaseManager;
   private xmlParser: XmlParserService;
   private diffEngine: DiffEngine;
+  private activeSyncAborts: Map<string, AbortController> = new Map();
 
   constructor(db: DatabaseManager, xmlParser: XmlParserService, diffEngine: DiffEngine) {
     this.db = db;
     this.xmlParser = xmlParser;
     this.diffEngine = diffEngine;
+  }
+
+  public isSyncRunning(profileId?: string): boolean {
+    if (profileId) {
+      return this.activeSyncAborts.has(profileId);
+    }
+    return this.activeSyncAborts.size > 0;
+  }
+
+  public stopSync(profileId?: string): boolean {
+    if (profileId) {
+      const controller = this.activeSyncAborts.get(profileId);
+      if (controller) {
+        controller.abort();
+        this.activeSyncAborts.delete(profileId);
+        return true;
+      }
+      return false;
+    } else {
+      let stoppedAny = false;
+      for (const [id, controller] of this.activeSyncAborts.entries()) {
+        controller.abort();
+        stoppedAny = true;
+      }
+      this.activeSyncAborts.clear();
+      return stoppedAny;
+    }
+  }
+
+  private checkAborted(signal?: AbortSignal): void {
+    if (signal && signal.aborted) {
+      const err = new Error('Synchronizacja została przerwana przez użytkownika.');
+      err.name = 'AbortError';
+      throw err;
+    }
   }
 
   private async loadXmlContent(profile: FeedProfile): Promise<string> {
@@ -58,10 +96,21 @@ export class SyncCoordinator {
 
     const client = new BaseLinkerClient(settings.baseLinkerToken);
 
+    // Cancel existing run for this profile if any
+    if (this.activeSyncAborts.has(profileId)) {
+      this.activeSyncAborts.get(profileId)?.abort();
+    }
+    const abortController = new AbortController();
+    this.activeSyncAborts.set(profileId, abortController);
+    const signal = abortController.signal;
+
     try {
+      this.checkAborted(signal);
+
       // 1. Fetch XML
       const xmlData = await this.loadXmlContent(profile);
 
+      this.checkAborted(signal);
       // Yield event loop before heavy parsing
       await this.yieldEventLoop();
 
@@ -80,6 +129,7 @@ export class SyncCoordinator {
         };
       }
 
+      this.checkAborted(signal);
       await this.yieldEventLoop();
 
       // Apply fixed stock override if configured for this profile
@@ -87,32 +137,48 @@ export class SyncCoordinator {
         const fixedVal = Number(profile.fixedStock);
         for (let i = 0; i < items.length; i++) {
           items[i].stock = fixedVal;
-          if (i % 2500 === 0) await this.yieldEventLoop();
+          if (i % 2500 === 0) {
+            this.checkAborted(signal);
+            await this.yieldEventLoop();
+          }
         }
       }
 
-      // Apply price modifications (Multiplier, NBP exchange rate)
-      const multiplier = (profile.priceMultiplier !== undefined && profile.priceMultiplier !== null && profile.priceMultiplier > 0)
-        ? Number(profile.priceMultiplier)
-        : 1.0;
-      const currency = (profile.priceCurrency || 'PLN').toUpperCase().trim();
-      let exchangeRate = 1.0;
-      if (currency !== 'PLN') {
-        try {
-          exchangeRate = await NbpRateService.getRate(currency);
-        } catch (nbpErr) {
-          console.warn(`[SyncCoordinator] Could not get NBP rate for currency ${currency}, defaulting to 1.0:`, nbpErr);
-        }
+      this.checkAborted(signal);
+
+      // Apply price modifications (Currency conversion + Operator + Value)
+      const srcCurrency = profile.priceSourceCurrency || profile.priceCurrency || 'PLN';
+      const tgtCurrency = profile.priceTargetCurrency || 'PLN';
+      const operator = profile.priceOperator || '*';
+      const modValue = profile.priceModifierValue !== undefined && profile.priceModifierValue !== null
+        ? Number(profile.priceModifierValue)
+        : (profile.priceMultiplier !== undefined && profile.priceMultiplier !== null && profile.priceMultiplier > 0
+            ? Number(profile.priceMultiplier)
+            : 1.0);
+
+      // Pre-warm NBP rates if needed
+      if (srcCurrency !== 'PLN') {
+        try { await NbpRateService.getRate(srcCurrency); } catch {}
+      }
+      if (tgtCurrency !== 'PLN') {
+        try { await NbpRateService.getRate(tgtCurrency); } catch {}
       }
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (typeof item.price === 'number' && !isNaN(item.price) && item.price > 0) {
-          // Calculation: sourcePrice * exchangeRate * multiplier
-          const modified = item.price * exchangeRate * multiplier;
-          item.price = Math.round(modified * 100) / 100;
+          item.price = await calculateModifiedPrice({
+            sourcePrice: item.price,
+            sourceCurrency: srcCurrency,
+            targetCurrency: tgtCurrency,
+            operator,
+            value: modValue
+          });
         }
-        if (i % 2500 === 0) await this.yieldEventLoop();
+        if (i % 2500 === 0) {
+          this.checkAborted(signal);
+          await this.yieldEventLoop();
+        }
       }
 
       // 3. Match against BaseLinker product IDs using local DB cache
@@ -151,7 +217,10 @@ export class SyncCoordinator {
       let imagesUpdatedCount = 0;
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        if (i % 1000 === 0) await this.yieldEventLoop();
+        if (i % 200 === 0) {
+          this.checkAborted(signal);
+          await this.yieldEventLoop();
+        }
         const existingInfos = blProductInfoMultiMap.get(item.identifier);
         if (!existingInfos || existingInfos.length === 0) {
           try {
@@ -229,6 +298,8 @@ export class SyncCoordinator {
         }
       }
 
+      this.checkAborted(signal);
+
       // 5. Calculate Deltas
       const deltas = this.diffEngine.calculateDeltas(profile.id, items);
 
@@ -251,6 +322,8 @@ export class SyncCoordinator {
         }
       }
 
+      this.checkAborted(signal);
+
       // 7. Push updates to BaseLinker
       let pricesUpdatedCount = 0;
       let stocksUpdatedCount = 0;
@@ -266,6 +339,8 @@ export class SyncCoordinator {
           }
         );
       }
+
+      this.checkAborted(signal);
 
       if (Object.keys(stocksToUpdate).length > 0) {
         stocksUpdatedCount = await client.updateInventoryProductsStock(
@@ -301,7 +376,8 @@ export class SyncCoordinator {
       };
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      this.logAndSaveStatus(profile, 'error', 0, 0, 0, errorMsg);
+      const isAborted = (err as { name?: string })?.name === 'AbortError' || errorMsg.includes('przerwana');
+      this.logAndSaveStatus(profile, isAborted ? 'idle' : 'error', 0, 0, 0, errorMsg);
       return {
         profileId,
         success: false,
@@ -310,6 +386,8 @@ export class SyncCoordinator {
         stocksUpdated: 0,
         message: errorMsg
       };
+    } finally {
+      this.activeSyncAborts.delete(profileId);
     }
   }
 

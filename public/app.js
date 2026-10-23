@@ -153,8 +153,19 @@ async function loadProfiles() {
   container.innerHTML = state.profiles.map(p => {
     const statusClass = p.lastSyncStatus === 'success' ? 'badge-success' : p.lastSyncStatus === 'error' ? 'badge-danger' : 'badge-neutral';
     const statusText = p.lastSyncStatus === 'success' ? 'Sukces' : p.lastSyncStatus === 'error' ? 'Błąd' : 'Bezczynny';
+
+    // Format price modification description
+    const op = p.priceOperator || '*';
+    const modVal = p.priceModifierValue !== undefined && p.priceModifierValue !== null ? p.priceModifierValue : (p.priceMultiplier || 1.0);
+    const srcCur = p.priceSourceCurrency || p.priceCurrency || 'PLN';
+    const tgtCur = p.priceTargetCurrency || 'PLN';
+    
+    let modText = `${op}${modVal}`;
+    if (op === '*' && modVal === 1.0) modText = 'brak modyfikacji (1:1)';
+    const currText = srcCur !== tgtCur ? `${srcCur} ➔ ${tgtCur} (NBP)` : srcCur;
+
     return `
-      <div class="profile-card">
+      <div class="profile-card" id="profile-card-${p.id}">
         <div class="profile-card-header">
           <div>
             <div class="profile-title">${p.name}</div>
@@ -167,14 +178,15 @@ async function loadProfiles() {
           <span>Źródło: <strong>${p.sourceType.toUpperCase()}</strong> (${p.sourcePath})</span>
           <span>Katalog docelowy: <strong>${p.targetInventoryId}</strong> | Magazyn: <strong>${p.targetWarehouseId}</strong> | Grupa cenowa: <strong>${p.targetPriceGroupId}</strong></span>
           <span>Klucz dopasowania: <strong>${p.identifierField.toUpperCase()}</strong> | Interwał: <strong>${p.syncIntervalMinutes} min</strong>${p.fixedStock !== undefined && p.fixedStock !== null ? ` | Stały stan: <strong>${p.fixedStock} szt.</strong>` : ''}</span>
-          <span>Modyfikacja ceny: <strong>${p.priceMultiplier && p.priceMultiplier !== 1 ? `x${p.priceMultiplier}` : '1.0x (standard)'}</strong>${p.priceCurrency && p.priceCurrency !== 'PLN' ? ` | Waluta: <strong>${p.priceCurrency} (NBP)</strong>` : ' | PLN'}${p.groupPriceModifiers && Object.keys(p.groupPriceModifiers).length > 0 ? ` | Grupy: <strong>${Object.keys(p.groupPriceModifiers).length} reguł</strong>` : ''}</span>
+          <span>Modyfikacja ceny: <strong>${modText}</strong> | Przeliczenie walut: <strong>${currText}</strong>${p.groupPriceModifiers && Object.keys(p.groupPriceModifiers).length > 0 ? ` | Grupy: <strong>${Object.keys(p.groupPriceModifiers).length} reguł</strong>` : ''}</span>
           <span>Produkty w pamięci BaseLinker: <strong style="color: var(--color-primary); cursor: pointer;" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 ${p.baseProductsCount ?? 0} szt.</strong></span>
           <span>Ostatnia synchronizacja: <strong>${p.lastSyncAt ? new Date(p.lastSyncAt).toLocaleString('pl-PL') : 'Nigdy'}</strong></span>
           ${p.lastSyncMessage ? `<div class="profile-status-msg status-${p.lastSyncStatus || 'neutral'}">${p.lastSyncStatus === 'error' ? '⚠️ ' : p.lastSyncStatus === 'success' ? '✅ ' : 'ℹ️ '}${p.lastSyncMessage}</div>` : ''}
         </div>
 
         <div class="profile-card-actions">
-          <button class="btn btn-primary" onclick="triggerSync('${p.id}', this)">⚡ Synchronizuj teraz</button>
+          <button class="btn btn-primary btn-sync-trigger" id="btn-sync-${p.id}" onclick="triggerSync('${p.id}', this)">⚡ Synchronizuj teraz</button>
+          <button class="btn btn-danger btn-sync-stop" id="btn-stop-${p.id}" style="display:none;" onclick="stopSync('${p.id}', this)">⏹ Zatrzymaj</button>
           <button class="btn btn-secondary" onclick="openBaseProductsModal(${p.targetInventoryId})">📦 Zobacz produkty BaseLinker (${p.baseProductsCount ?? 0})</button>
           <button class="btn btn-secondary" onclick="goToMapper('${p.id}')">🧩 Edytuj mapowanie</button>
           <button class="btn btn-danger" onclick="deleteProfile('${p.id}')">Usuń</button>
@@ -211,10 +223,53 @@ function showToast(title, message, type = 'info', duration = 5000) {
   }, duration);
 }
 
+// Zatrzymanie synchronizacji profilu
+window.stopSync = async function(id, btnElement) {
+  const profile = state.profiles.find(x => x.id === id);
+  const name = profile ? profile.name : id;
+
+  if (btnElement) {
+    btnElement.disabled = true;
+    btnElement.innerHTML = `<span class="spin">⏳</span> Zatrzymywanie...`;
+  }
+
+  try {
+    const res = await api(`/profiles/${id}/stop`, { method: 'POST' });
+    showToast('Zatrzymywanie synchronizacji', `Wysłano sygnał zatrzymania dla „${name}”.`, 'info', 3000);
+  } catch (err) {
+    showToast('Błąd zatrzymania', err.message, 'error', 4000);
+  }
+};
+
+// Globalne zatrzymanie synchronizacji
+window.stopAllSync = async function() {
+  const btnStop = document.getElementById('btn-stop-all');
+  if (btnStop) {
+    btnStop.disabled = true;
+    btnStop.innerHTML = `<span class="spin">⏳</span> Zatrzymywanie...`;
+  }
+  try {
+    await api('/sync/stop', { method: 'POST' });
+    showToast('Zatrzymano synchronizację', 'Wysłano sygnał zatrzymania do wszystkich aktywnych zadań.', 'info', 4000);
+  } catch (e) {
+    showToast('Błąd zatrzymania', e.message, 'error', 4000);
+  } finally {
+    if (btnStop) {
+      btnStop.disabled = false;
+      btnStop.innerHTML = `<span class="icon">⏹</span> Zatrzymaj synchronizację`;
+      btnStop.style.display = 'none';
+    }
+  }
+};
+
+document.getElementById('btn-stop-all')?.addEventListener('click', window.stopAllSync);
+
 // Uruchamianie synchronizacji z animacją i powiadomieniem
 window.triggerSync = async function(id, btnElement) {
   const profile = state.profiles.find(x => x.id === id);
   const name = profile ? profile.name : id;
+  const stopBtn = document.getElementById(`btn-stop-${id}`);
+  const topStopBtn = document.getElementById('btn-stop-all');
 
   let originalHtml = '';
   if (btnElement) {
@@ -222,6 +277,8 @@ window.triggerSync = async function(id, btnElement) {
     btnElement.innerHTML = `<span class="spin">⚡</span> Synchronizowanie...`;
     btnElement.disabled = true;
   }
+  if (stopBtn) stopBtn.style.display = 'inline-flex';
+  if (topStopBtn) topStopBtn.style.display = 'inline-flex';
 
   showToast('Rozpoczęto synchronizację', `Synchronizowanie „${name}” z BaseLinker...`, 'info', 3000);
 
@@ -235,7 +292,7 @@ window.triggerSync = async function(id, btnElement) {
         6000
       );
     } else {
-      showToast('Ostrzeżenie synchronizacji', `${name}: ${res.message}`, 'warning', 6000);
+      showToast('Status synchronizacji', `${name}: ${res.message}`, 'warning', 6000);
     }
     await loadProfiles();
   } catch (e) {
@@ -245,14 +302,18 @@ window.triggerSync = async function(id, btnElement) {
       btnElement.innerHTML = originalHtml;
       btnElement.disabled = false;
     }
+    if (stopBtn) stopBtn.style.display = 'none';
+    if (topStopBtn) topStopBtn.style.display = 'none';
   }
 };
 
 document.getElementById('btn-sync-all').addEventListener('click', async function() {
   const btn = this;
+  const topStopBtn = document.getElementById('btn-stop-all');
   const originalHtml = btn.innerHTML;
   btn.innerHTML = `<span class="spin">⚡</span> Synchronizowanie wszystkich...`;
   btn.disabled = true;
+  if (topStopBtn) topStopBtn.style.display = 'inline-flex';
 
   showToast('Rozpoczęto synchronizację zbiorczą', 'Wykonywanie synchronizacji dla wszystkich aktywnych profili...', 'info', 3000);
 
@@ -268,7 +329,7 @@ document.getElementById('btn-sync-all').addEventListener('click', async function
           showToast(`Zakończono: ${p.name}`, res.message, 'success', 5000);
         } else {
           failCount++;
-          showToast(`Ostrzeżenie: ${p.name}`, res.message, 'warning', 5000);
+          showToast(`Informacja: ${p.name}`, res.message, 'warning', 5000);
         }
       } catch (err) {
         failCount++;
@@ -279,10 +340,11 @@ document.getElementById('btn-sync-all').addEventListener('click', async function
 
   btn.innerHTML = originalHtml;
   btn.disabled = false;
+  if (topStopBtn) topStopBtn.style.display = 'none';
 
   showToast(
     'Zakończono synchronizację zbiorczą',
-    `Przetworzono wszystkie profile (sukces: ${successCount}, błędy: ${failCount}).`,
+    `Przetworzono wszystkie profile (sukces: ${successCount}, błędy/zatrzymano: ${failCount}).`,
     failCount === 0 ? 'success' : 'warning',
     6000
   );
@@ -347,10 +409,12 @@ window.openProfileModal = function() {
   document.getElementById('prof-auth-header').value = '';
   document.getElementById('prof-interval').value = '30';
   document.getElementById('prof-fixed-stock').value = '';
+  document.getElementById('prof-price-source-currency').value = 'PLN';
+  document.getElementById('prof-price-target-currency').value = 'PLN';
+  document.getElementById('prof-price-operator').value = '*';
   document.getElementById('prof-price-multiplier').value = '1.00';
-  document.getElementById('prof-price-currency').value = 'PLN';
   document.getElementById('prof-group-modifiers').value = '';
-  updateNbpCurrencyHint('PLN');
+  updateNbpCurrencyHint();
   document.getElementById('modal-title').textContent = 'Dodaj profil pliku XML';
   updateSourceTypeUI();
   document.getElementById('profile-modal').style.display = 'flex';
@@ -376,8 +440,16 @@ window.editProfile = function(id) {
   document.getElementById('prof-auth-header').value = p.authHeader || '';
   document.getElementById('prof-interval').value = p.syncIntervalMinutes;
   document.getElementById('prof-fixed-stock').value = p.fixedStock !== undefined && p.fixedStock !== null ? p.fixedStock : '';
-  document.getElementById('prof-price-multiplier').value = p.priceMultiplier !== undefined && p.priceMultiplier !== null ? p.priceMultiplier : '1.00';
-  document.getElementById('prof-price-currency').value = p.priceCurrency || 'PLN';
+  
+  // Set price options
+  document.getElementById('prof-price-source-currency').value = p.priceSourceCurrency || p.priceCurrency || 'PLN';
+  document.getElementById('prof-price-target-currency').value = p.priceTargetCurrency || 'PLN';
+  document.getElementById('prof-price-operator').value = p.priceOperator || '*';
+  
+  const modVal = p.priceModifierValue !== undefined && p.priceModifierValue !== null
+    ? p.priceModifierValue
+    : (p.priceMultiplier !== undefined && p.priceMultiplier !== null ? p.priceMultiplier : '1.00');
+  document.getElementById('prof-price-multiplier').value = modVal;
   
   // Format groupPriceModifiers object as text lines
   let groupModifiersText = '';
@@ -387,7 +459,7 @@ window.editProfile = function(id) {
       .join('\n');
   }
   document.getElementById('prof-group-modifiers').value = groupModifiersText;
-  updateNbpCurrencyHint(p.priceCurrency || 'PLN');
+  updateNbpCurrencyHint();
 
   document.getElementById('modal-title').textContent = 'Edytuj profil: ' + p.name;
   updateSourceTypeUI();
@@ -419,46 +491,56 @@ function populateModalDropdowns(invId, whId, pgId) {
   ).join('');
 }
 
-// Live NBP exchange rate fetcher for currency hint
+// Live NBP exchange rate fetcher for currency conversion hint
 let cachedNbpRates = {};
-async function updateNbpCurrencyHint(currency) {
+async function updateNbpCurrencyHint() {
   const hintEl = document.getElementById('nbp-currency-hint');
   if (!hintEl) return;
-  if (currency === 'PLN') {
-    hintEl.textContent = 'Aktualny kurs NBP: 1.0000 PLN (brak przewalutowania)';
+
+  const srcCurr = (document.getElementById('prof-price-source-currency')?.value || 'PLN').toUpperCase().trim();
+  const tgtCurr = (document.getElementById('prof-price-target-currency')?.value || 'PLN').toUpperCase().trim();
+
+  if (srcCurr === tgtCurr) {
+    hintEl.textContent = `Brak przewalutowania (${srcCurr} = ${tgtCurr}, mnożnik 1:1)`;
     return;
   }
-  hintEl.textContent = `Pobieranie aktualnego kursu NBP dla ${currency}...`;
+
+  hintEl.textContent = `Pobieranie aktualnego kursu NBP dla ${srcCurr} ➔ ${tgtCurr}...`;
   try {
-    if (!cachedNbpRates[currency]) {
+    if (!cachedNbpRates[srcCurr] || !cachedNbpRates[tgtCurr]) {
       const res = await api('/nbp/rates');
       if (res && res.rates) {
+        cachedNbpRates['PLN'] = 1.0;
         for (const item of res.rates) {
           cachedNbpRates[item.code] = item.rate;
         }
       }
     }
-    const rate = cachedNbpRates[currency];
-    if (rate) {
-      hintEl.textContent = `Aktualny średni kurs NBP: 1 ${currency} = ${rate.toFixed(4)} PLN`;
+    const srcRate = cachedNbpRates[srcCurr] || (srcCurr === 'PLN' ? 1.0 : null);
+    const tgtRate = cachedNbpRates[tgtCurr] || (tgtCurr === 'PLN' ? 1.0 : null);
+
+    if (srcRate && tgtRate) {
+      const ratio = srcRate / tgtRate;
+      hintEl.textContent = `Przelicznik NBP: 1 ${srcCurr} = ${ratio.toFixed(4)} ${tgtCurr} (1 ${tgtCurr} = ${(1 / ratio).toFixed(4)} ${srcCurr})`;
     } else {
-      hintEl.textContent = `Kurs dla ${currency} zostanie zaktualizowany automatycznie podczas synchronizacji.`;
+      hintEl.textContent = `Kurs dla ${srcCurr} ➔ ${tgtCurr} zostanie pobrany automatycznie podczas synchronizacji.`;
     }
   } catch (err) {
-    hintEl.textContent = `Średni kurs NBP dla ${currency} (pobierany automatycznie)`;
+    hintEl.textContent = `Kurs NBP pobierany automatycznie przed synchronizacją.`;
   }
 }
 
-document.getElementById('prof-price-currency')?.addEventListener('change', function() {
-  updateNbpCurrencyHint(this.value);
-});
+document.getElementById('prof-price-source-currency')?.addEventListener('change', updateNbpCurrencyHint);
+document.getElementById('prof-price-target-currency')?.addEventListener('change', updateNbpCurrencyHint);
 
 document.getElementById('btn-save-profile').addEventListener('click', async () => {
   const id = document.getElementById('prof-id').value;
   const existing = state.profiles.find(x => x.id === id);
   const fixedStockVal = document.getElementById('prof-fixed-stock').value.trim();
   const multiplierVal = parseFloat(document.getElementById('prof-price-multiplier').value) || 1.0;
-  const currencyVal = document.getElementById('prof-price-currency').value || 'PLN';
+  const srcCurrencyVal = document.getElementById('prof-price-source-currency').value || 'PLN';
+  const tgtCurrencyVal = document.getElementById('prof-price-target-currency').value || 'PLN';
+  const operatorVal = document.getElementById('prof-price-operator').value || '*';
 
   // Parse groupPriceModifiers lines
   const groupLines = document.getElementById('prof-group-modifiers').value.split('\n');
@@ -488,7 +570,11 @@ document.getElementById('btn-save-profile').addEventListener('click', async () =
     syncIntervalMinutes: parseInt(document.getElementById('prof-interval').value, 10) || 30,
     fixedStock: fixedStockVal !== '' ? parseInt(fixedStockVal, 10) : null,
     priceMultiplier: multiplierVal,
-    priceCurrency: currencyVal,
+    priceCurrency: srcCurrencyVal,
+    priceSourceCurrency: srcCurrencyVal,
+    priceTargetCurrency: tgtCurrencyVal,
+    priceOperator: operatorVal,
+    priceModifierValue: multiplierVal,
     groupPriceModifiers: Object.keys(groupModifiers).length > 0 ? groupModifiers : null,
     mapping: existing ? existing.mapping : {
       itemTag: 'product',

@@ -84,6 +84,26 @@ export class DatabaseManager {
       // Column may already exist
     }
     try {
+      this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN priceSourceCurrency TEXT DEFAULT 'PLN'`);
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN priceTargetCurrency TEXT DEFAULT 'PLN'`);
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN priceOperator TEXT DEFAULT '*'`);
+    } catch {
+      // Column may already exist
+    }
+    try {
+      this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN priceModifierValue REAL DEFAULT 1.0`);
+    } catch {
+      // Column may already exist
+    }
+    try {
       this.db.exec(`ALTER TABLE feed_profiles ADD COLUMN groupPriceModifiersJson TEXT DEFAULT NULL`);
     } catch {
       // Column may already exist
@@ -203,6 +223,10 @@ export class DatabaseManager {
       fixedStock?: number | null;
       priceMultiplier?: number | null;
       priceCurrency?: string | null;
+      priceSourceCurrency?: string | null;
+      priceTargetCurrency?: string | null;
+      priceOperator?: string | null;
+      priceModifierValue?: number | null;
       groupPriceModifiersJson?: string | null;
       lastSyncAt?: string;
       lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';
@@ -233,6 +257,10 @@ export class DatabaseManager {
         fixedStock: r.fixedStock !== null && r.fixedStock !== undefined ? Number(r.fixedStock) : undefined,
         priceMultiplier: r.priceMultiplier !== null && r.priceMultiplier !== undefined ? Number(r.priceMultiplier) : 1.0,
         priceCurrency: r.priceCurrency || 'PLN',
+        priceSourceCurrency: r.priceSourceCurrency || (r.priceCurrency || 'PLN'),
+        priceTargetCurrency: r.priceTargetCurrency || 'PLN',
+        priceOperator: (r.priceOperator as '*' | '/' | '+' | '-') || '*',
+        priceModifierValue: r.priceModifierValue !== null && r.priceModifierValue !== undefined ? Number(r.priceModifierValue) : (r.priceMultiplier !== null && r.priceMultiplier !== undefined ? Number(r.priceMultiplier) : 1.0),
         groupPriceModifiers: groupPriceModifiers || undefined,
         lastSyncAt: r.lastSyncAt || undefined,
         lastSyncStatus: r.lastSyncStatus || undefined,
@@ -258,6 +286,10 @@ export class DatabaseManager {
       fixedStock?: number | null;
       priceMultiplier?: number | null;
       priceCurrency?: string | null;
+      priceSourceCurrency?: string | null;
+      priceTargetCurrency?: string | null;
+      priceOperator?: string | null;
+      priceModifierValue?: number | null;
       groupPriceModifiersJson?: string | null;
       lastSyncAt?: string;
       lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';
@@ -289,6 +321,10 @@ export class DatabaseManager {
       fixedStock: row.fixedStock !== null && row.fixedStock !== undefined ? Number(row.fixedStock) : undefined,
       priceMultiplier: row.priceMultiplier !== null && row.priceMultiplier !== undefined ? Number(row.priceMultiplier) : 1.0,
       priceCurrency: row.priceCurrency || 'PLN',
+      priceSourceCurrency: row.priceSourceCurrency || (row.priceCurrency || 'PLN'),
+      priceTargetCurrency: row.priceTargetCurrency || 'PLN',
+      priceOperator: (row.priceOperator as '*' | '/' | '+' | '-') || '*',
+      priceModifierValue: row.priceModifierValue !== null && row.priceModifierValue !== undefined ? Number(row.priceModifierValue) : (row.priceMultiplier !== null && row.priceMultiplier !== undefined ? Number(row.priceMultiplier) : 1.0),
       groupPriceModifiers: groupPriceModifiers || undefined,
       lastSyncAt: row.lastSyncAt || undefined,
       lastSyncStatus: row.lastSyncStatus || undefined,
@@ -302,9 +338,11 @@ export class DatabaseManager {
         id, name, enabled, sourceType, sourcePath, authHeader,
         targetInventoryId, targetWarehouseId, targetPriceGroupId,
         identifierField, mappingJson, syncIntervalMinutes, fixedStock,
-        priceMultiplier, priceCurrency, groupPriceModifiersJson,
+        priceMultiplier, priceCurrency,
+        priceSourceCurrency, priceTargetCurrency, priceOperator, priceModifierValue,
+        groupPriceModifiersJson,
         lastSyncAt, lastSyncStatus, lastSyncMessage
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         name = excluded.name,
         enabled = excluded.enabled,
@@ -320,11 +358,22 @@ export class DatabaseManager {
         fixedStock = excluded.fixedStock,
         priceMultiplier = excluded.priceMultiplier,
         priceCurrency = excluded.priceCurrency,
+        priceSourceCurrency = excluded.priceSourceCurrency,
+        priceTargetCurrency = excluded.priceTargetCurrency,
+        priceOperator = excluded.priceOperator,
+        priceModifierValue = excluded.priceModifierValue,
         groupPriceModifiersJson = excluded.groupPriceModifiersJson,
         lastSyncAt = excluded.lastSyncAt,
         lastSyncStatus = excluded.lastSyncStatus,
         lastSyncMessage = excluded.lastSyncMessage
     `);
+
+    const effectiveOperator = profile.priceOperator || '*';
+    const effectiveModifierVal = profile.priceModifierValue !== undefined && profile.priceModifierValue !== null
+      ? Number(profile.priceModifierValue)
+      : (profile.priceMultiplier !== undefined && profile.priceMultiplier !== null ? Number(profile.priceMultiplier) : 1.0);
+    const effectiveSourceCurr = profile.priceSourceCurrency || profile.priceCurrency || 'PLN';
+    const effectiveTargetCurr = profile.priceTargetCurrency || 'PLN';
 
     stmt.run(
       profile.id,
@@ -340,8 +389,12 @@ export class DatabaseManager {
       JSON.stringify(profile.mapping),
       profile.syncIntervalMinutes,
       profile.fixedStock !== undefined && profile.fixedStock !== null ? Number(profile.fixedStock) : null,
-      profile.priceMultiplier !== undefined && profile.priceMultiplier !== null ? Number(profile.priceMultiplier) : 1.0,
-      profile.priceCurrency || 'PLN',
+      effectiveModifierVal,
+      effectiveSourceCurr,
+      effectiveSourceCurr,
+      effectiveTargetCurr,
+      effectiveOperator,
+      effectiveModifierVal,
       profile.groupPriceModifiers ? JSON.stringify(profile.groupPriceModifiers) : null,
       profile.lastSyncAt || null,
       profile.lastSyncStatus || null,

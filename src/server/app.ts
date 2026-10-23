@@ -375,6 +375,26 @@ export function createApiServer(
     }
   });
 
+  // Stop Sync for Profile
+  app.post('/api/profiles/:id/stop', (req, res) => {
+    try {
+      const stopped = syncCoordinator.stopSync(req.params.id);
+      res.json({ success: true, stopped });
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
+  // Stop All Active Syncs
+  app.post('/api/sync/stop', (req, res) => {
+    try {
+      const stopped = syncCoordinator.stopSync();
+      res.json({ success: true, stopped });
+    } catch (e: unknown) {
+      res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  });
+
   // Get Sync Logs
   app.get('/api/logs', (req, res) => {
     try {

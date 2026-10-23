@@ -92,4 +92,9 @@ export class NbpRateService {
     }
     return list.sort((a, b) => a.code.localeCompare(b.code));
   }
+
+  public static clearCache(): void {
+    this.cachedRates.clear();
+    this.lastFetchTime = 0;
+  }
 }

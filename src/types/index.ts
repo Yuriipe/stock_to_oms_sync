@@ -25,6 +25,10 @@ export interface FeedProfile {
   fixedStock?: number | null;
   priceMultiplier?: number | null;
   priceCurrency?: string | null;
+  priceSourceCurrency?: string | null;
+  priceTargetCurrency?: string | null;
+  priceOperator?: '*' | '/' | '+' | '-' | string | null;
+  priceModifierValue?: number | null;
   groupPriceModifiers?: Record<string, number> | null;
   lastSyncAt?: string;
   lastSyncStatus?: 'idle' | 'running' | 'success' | 'error';

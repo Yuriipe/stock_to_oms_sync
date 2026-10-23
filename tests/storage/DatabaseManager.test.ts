@@ -97,6 +97,10 @@ describe('DatabaseManager & Storage Repository', () => {
       syncIntervalMinutes: 30,
       priceMultiplier: 1.25,
       priceCurrency: 'EUR',
+      priceSourceCurrency: 'EUR',
+      priceTargetCurrency: 'PLN',
+      priceOperator: '/',
+      priceModifierValue: 1.25,
       groupPriceModifiers: {
         'Elektronika': 1.15,
         'Akcesoria': 1.30
@@ -109,6 +113,10 @@ describe('DatabaseManager & Storage Repository', () => {
     expect(retrieved).toBeDefined();
     expect(retrieved?.priceMultiplier).toBe(1.25);
     expect(retrieved?.priceCurrency).toBe('EUR');
+    expect(retrieved?.priceSourceCurrency).toBe('EUR');
+    expect(retrieved?.priceTargetCurrency).toBe('PLN');
+    expect(retrieved?.priceOperator).toBe('/');
+    expect(retrieved?.priceModifierValue).toBe(1.25);
     expect(retrieved?.groupPriceModifiers).toEqual({
       'Elektronika': 1.15,
       'Akcesoria': 1.30

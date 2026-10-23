@@ -5,6 +5,7 @@ import { DatabaseManager } from '../../src/storage/DatabaseManager';
 import { XmlParserService } from '../../src/parser/XmlParserService';
 import { DiffEngine } from '../../src/diff/DiffEngine';
 import { FeedProfile } from '../../src/types';
+import { NbpRateService } from '../../src/service/NbpRateService';
 
 vi.mock('axios');
 const mockedAxios = vi.mocked(axios, true);
@@ -39,6 +40,7 @@ describe('SyncCoordinator', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    NbpRateService.clearCache();
     db = new DatabaseManager(':memory:');
     db.initialize();
     db.updateSettings({ baseLinkerToken: 'valid-token' });
@@ -230,5 +232,113 @@ describe('SyncCoordinator', () => {
     // Calculated price: 10.00 (EUR) * 4.50 (rate) * 1.20 (multiplier) = 54.00 PLN
     const cached = db.getCacheEntry(priceProfile.id, 'EUR-PROD-1');
     expect(cached?.lastPrice).toBe(54.00);
+  });
+
+  it('should correctly divide when converting PLN to EUR', async () => {
+    const plnToEurProfile: FeedProfile = {
+      ...testProfile,
+      id: 'pln-to-eur-profile',
+      priceSourceCurrency: 'PLN',
+      priceTargetCurrency: 'EUR',
+      priceOperator: '*',
+      priceModifierValue: 1.0
+    };
+    db.saveProfile(plnToEurProfile);
+
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      if (url.includes('api.nbp.pl')) {
+        return {
+          data: [{
+            table: 'A',
+            rates: [{ code: 'EUR', mid: 4.00 }]
+          }]
+        };
+      }
+      return {
+        data: `
+          <catalog>
+            <item>
+              <sku>PLN-PROD-1</sku>
+              <price>100.00</price>
+              <stock>5</stock>
+            </item>
+          </catalog>
+        `
+      };
+    });
+
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { status: 'SUCCESS', products: {} }
+    });
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { status: 'SUCCESS', product_id: 9902 }
+    });
+
+    const result = await coordinator.syncProfile(plnToEurProfile.id);
+    expect(result.success).toBe(true);
+
+    // 100.00 PLN converted to EUR at 4.00 PLN/EUR -> 100 / 4.00 = 25.00 EUR
+    const cached = db.getCacheEntry(plnToEurProfile.id, 'PLN-PROD-1');
+    expect(cached?.lastPrice).toBe(25.00);
+  });
+
+  it('should apply division and plus/minus operators', async () => {
+    const divProfile: FeedProfile = {
+      ...testProfile,
+      id: 'div-profile',
+      priceSourceCurrency: 'PLN',
+      priceTargetCurrency: 'PLN',
+      priceOperator: '/',
+      priceModifierValue: 2.0
+    };
+    db.saveProfile(divProfile);
+
+    mockedAxios.get.mockImplementation(async () => ({
+      data: `
+        <catalog>
+          <item>
+            <sku>DIV-PROD-1</sku>
+            <price>50.00</price>
+            <stock>2</stock>
+          </item>
+        </catalog>
+      `
+    }));
+
+    mockedAxios.post.mockResolvedValueOnce({ data: { status: 'SUCCESS', products: {} } });
+    mockedAxios.post.mockResolvedValueOnce({ data: { status: 'SUCCESS', product_id: 9903 } });
+
+    const result = await coordinator.syncProfile(divProfile.id);
+    expect(result.success).toBe(true);
+    // 50.00 / 2.0 = 25.00
+    expect(db.getCacheEntry(divProfile.id, 'DIV-PROD-1')?.lastPrice).toBe(25.00);
+  });
+
+  it('should stop synchronization when requested', async () => {
+    const slowProfile: FeedProfile = {
+      ...testProfile,
+      id: 'slow-profile'
+    };
+    db.saveProfile(slowProfile);
+
+    mockedAxios.get.mockImplementation(async () => {
+      // simulate stop before completion
+      coordinator.stopSync(slowProfile.id);
+      return {
+        data: `
+          <catalog>
+            <item>
+              <sku>SLOW-1</sku>
+              <price>10.00</price>
+              <stock>1</stock>
+            </item>
+          </catalog>
+        `
+      };
+    });
+
+    const result = await coordinator.syncProfile(slowProfile.id);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('przerwana');
   });
 });
