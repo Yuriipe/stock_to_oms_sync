@@ -393,7 +393,7 @@ export class SyncCoordinator {
 
   private logAndSaveStatus(
     profile: FeedProfile,
-    status: 'success' | 'error',
+    status: 'success' | 'error' | 'idle',
     itemsProcessed: number,
     pricesUpdated: number,
     stocksUpdated: number,

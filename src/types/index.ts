@@ -60,7 +60,7 @@ export interface SyncLogEntry {
   id?: number;
   profileId: string;
   timestamp: string;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'idle';
   itemsProcessed: number;
   pricesUpdated: number;
   stocksUpdated: number;
