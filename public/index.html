@@ -163,9 +163,17 @@
 
               <div class="form-row">
                 <div class="form-group col-6">
+                  <label>Ścieżka / tag Dostępności (Opcjonalnie)</label>
+                  <input type="text" id="map-availability-path" class="input-field" placeholder="availability lub dostepnosc">
+                  <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">Jeśli wartość to false, 0, brak lub niedostępny, stan w BaseLinker zostanie zmieniony na 0</small>
+                </div>
+                <div class="form-group col-6">
                   <label>Ścieżka / tag Nazwy produktu (Opcjonalnie)</label>
                   <input type="text" id="map-name-path" class="input-field" placeholder="name lub title">
                 </div>
+              </div>
+
+              <div class="form-row">
                 <div class="form-group col-6">
                   <label>Ścieżka / tag URL zdjęcia (Opcjonalnie)</label>
                   <input type="text" id="map-image-path" class="input-field" placeholder="images.image lub image_url">
@@ -188,6 +196,7 @@
                         <th>EAN</th>
                         <th>Cena</th>
                         <th>Stan magazynowy</th>
+                        <th>Dostępność</th>
                         <th>Nazwa</th>
                         <th>Zdjęcie</th>
                       </tr>
@@ -522,6 +531,7 @@
                         <li><strong>Ścieżka / tag EAN:</strong> znacznik kodu kreskowego (np. <span class="code-pill">ean</span>, <span class="code-pill">barcode</span>).</li>
                         <li><strong>Ścieżka / tag Ceny:</strong> znacznik ceny (np. <span class="code-pill">price</span>, <span class="code-pill">cena</span>, <span class="code-pill">price_netto</span>).</li>
                         <li><strong>Ścieżka / tag Stanu magazynowego:</strong> znacznik ilości (np. <span class="code-pill">qty</span>, <span class="code-pill">stock</span>, <span class="code-pill">stan</span>).</li>
+                        <li><strong>Ścieżka / tag Dostępności (Opcjonalnie):</strong> znacznik dostępności (np. <span class="code-pill">availability</span>, <span class="code-pill">dostepnosc</span>, <span class="code-pill">status</span>). Wartości takie jak <code>false</code>, <code>0</code>, <code>brak</code> lub <code>niedostępny</code> automatycznie zmieniają stan magazynowy na 0 podczas synchronizacji.</li>
                         <li><strong>Ścieżka / tag Nazwy produktu:</strong> znacznik nazwy artykułu (np. <span class="code-pill">name</span>, <span class="code-pill">title</span>).</li>
                       </ul>
                     </li>

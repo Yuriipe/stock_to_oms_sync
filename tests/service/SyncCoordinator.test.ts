@@ -341,4 +341,73 @@ describe('SyncCoordinator', () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain('przerwana');
   });
+
+  it('should change stock to 0 during sync if availability tag value is false or 0, even with fixedStock', async () => {
+    const availProfile: FeedProfile = {
+      ...testProfile,
+      id: 'avail-profile',
+      fixedStock: 50,
+      mapping: {
+        ...testProfile.mapping,
+        availabilityPath: 'availability'
+      }
+    };
+    db.saveProfile(availProfile);
+
+    // Initial cache entries so diff engine detects changes
+    db.updateCacheEntry(availProfile.id, 'PROD-AVAIL-TRUE', 10.0, 5);
+    db.updateCacheEntry(availProfile.id, 'PROD-AVAIL-FALSE', 10.0, 15);
+    db.updateCacheEntry(availProfile.id, 'PROD-AVAIL-ZERO', 10.0, 15);
+
+    mockedAxios.get.mockResolvedValueOnce({
+      data: `
+        <catalog>
+          <item>
+            <sku>PROD-AVAIL-TRUE</sku>
+            <price>10.00</price>
+            <stock>12</stock>
+            <availability>true</availability>
+          </item>
+          <item>
+            <sku>PROD-AVAIL-FALSE</sku>
+            <price>10.00</price>
+            <stock>15</stock>
+            <availability>false</availability>
+          </item>
+          <item>
+            <sku>PROD-AVAIL-ZERO</sku>
+            <price>10.00</price>
+            <stock>8</stock>
+            <availability>0</availability>
+          </item>
+        </catalog>
+      `
+    });
+
+    // 1. Mock fetchAllInventoryProducts returning the 3 existing products
+    mockedAxios.post.mockResolvedValueOnce({
+      data: {
+        status: 'SUCCESS',
+        products: {
+          '7001': { id: 7001, sku: 'PROD-AVAIL-TRUE', ean: '', name: 'True' },
+          '7002': { id: 7002, sku: 'PROD-AVAIL-FALSE', ean: '', name: 'False' },
+          '7003': { id: 7003, sku: 'PROD-AVAIL-ZERO', ean: '', name: 'Zero' }
+        }
+      }
+    });
+
+    // 2. Mock updateInventoryProductsStock
+    mockedAxios.post.mockResolvedValueOnce({
+      data: { status: 'SUCCESS', counter: 3 }
+    });
+
+    const result = await coordinator.syncProfile(availProfile.id);
+    expect(result.success).toBe(true);
+    expect(result.itemsProcessed).toBe(3);
+
+    // Verify cache has stock 0 for false and zero availability, and 50 (fixedStock) for true
+    expect(db.getCacheEntry(availProfile.id, 'PROD-AVAIL-TRUE')?.lastStock).toBe(50);
+    expect(db.getCacheEntry(availProfile.id, 'PROD-AVAIL-FALSE')?.lastStock).toBe(0);
+    expect(db.getCacheEntry(availProfile.id, 'PROD-AVAIL-ZERO')?.lastStock).toBe(0);
+  }, 15000);
 });

@@ -5,6 +5,7 @@ export interface XmlFieldMapping {
   eanPath: string;
   pricePath: string;
   stockPath: string;
+  availabilityPath?: string;
   namePath?: string;
   imagePath?: string;
 }

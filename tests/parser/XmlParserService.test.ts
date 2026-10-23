@@ -196,4 +196,137 @@ describe('XmlParserService with Dynamic Mapping', () => {
     expect(items[0].sku).toBe('IMG-01');
     expect(items[0].imageUrl).toBe('https://example.com/photos/item1.jpg');
   });
+
+  describe('Availability tag mapping and stock adjustment', () => {
+    it('should set stock to 0 when availability is false, 0, brak or niedostępny', async () => {
+      const xml = `
+        <feed>
+          <product>
+            <sku>P-FALSE</sku>
+            <price>29.99</price>
+            <stock>15</stock>
+            <availability>false</availability>
+          </product>
+          <product>
+            <sku>P-ZERO</sku>
+            <price>39.99</price>
+            <stock>20</stock>
+            <availability>0</availability>
+          </product>
+          <product>
+            <sku>P-BRAK</sku>
+            <price>19.99</price>
+            <stock>8</stock>
+            <availability>brak</availability>
+          </product>
+          <product>
+            <sku>P-NIEDOSTEPNY</sku>
+            <price>49.99</price>
+            <stock>12</stock>
+            <availability>niedostępny</availability>
+          </product>
+          <product>
+            <sku>P-OUT-OF-STOCK</sku>
+            <price>59.99</price>
+            <stock>5</stock>
+            <availability>out of stock</availability>
+          </product>
+          <product>
+            <sku>P-AVAILABLE</sku>
+            <price>99.99</price>
+            <stock>30</stock>
+            <availability>true</availability>
+          </product>
+          <product>
+            <sku>P-DOSTEPNY</sku>
+            <price>79.99</price>
+            <stock>25</stock>
+            <availability>dostępny</availability>
+          </product>
+        </feed>
+      `;
+
+      const mapping: XmlFieldMapping = {
+        itemTag: 'product',
+        identifierField: 'sku',
+        skuPath: 'sku',
+        eanPath: '',
+        pricePath: 'price',
+        stockPath: 'stock',
+        availabilityPath: 'availability'
+      };
+
+      const items = await service.parseXml(xml, mapping);
+      expect(items).toHaveLength(7);
+
+      expect(items[0].sku).toBe('P-FALSE');
+      expect(items[0].stock).toBe(0);
+      expect(items[0].isAvailable).toBe(false);
+
+      expect(items[1].sku).toBe('P-ZERO');
+      expect(items[1].stock).toBe(0);
+      expect(items[1].isAvailable).toBe(false);
+
+      expect(items[2].sku).toBe('P-BRAK');
+      expect(items[2].stock).toBe(0);
+      expect(items[2].isAvailable).toBe(false);
+
+      expect(items[3].sku).toBe('P-NIEDOSTEPNY');
+      expect(items[3].stock).toBe(0);
+      expect(items[3].isAvailable).toBe(false);
+
+      expect(items[4].sku).toBe('P-OUT-OF-STOCK');
+      expect(items[4].stock).toBe(0);
+      expect(items[4].isAvailable).toBe(false);
+
+      expect(items[5].sku).toBe('P-AVAILABLE');
+      expect(items[5].stock).toBe(30);
+      expect(items[5].isAvailable).toBe(true);
+
+      expect(items[6].sku).toBe('P-DOSTEPNY');
+      expect(items[6].stock).toBe(25);
+      expect(items[6].isAvailable).toBe(true);
+    });
+
+    it('should correctly evaluate various values in isUnavailableValue', () => {
+      // Unavailable values
+      expect(service.isUnavailableValue('false')).toBe(true);
+      expect(service.isUnavailableValue('FALSE')).toBe(true);
+      expect(service.isUnavailableValue(false)).toBe(true);
+      expect(service.isUnavailableValue('0')).toBe(true);
+      expect(service.isUnavailableValue(0)).toBe(true);
+      expect(service.isUnavailableValue('0.0')).toBe(true);
+      expect(service.isUnavailableValue('-1')).toBe(true);
+      expect(service.isUnavailableValue(-1)).toBe(true);
+      expect(service.isUnavailableValue('no')).toBe(true);
+      expect(service.isUnavailableValue('nie')).toBe(true);
+      expect(service.isUnavailableValue('brak')).toBe(true);
+      expect(service.isUnavailableValue('brak towaru')).toBe(true);
+      expect(service.isUnavailableValue('brak w magazynie')).toBe(true);
+      expect(service.isUnavailableValue('niedostępny')).toBe(true);
+      expect(service.isUnavailableValue('niedostepny')).toBe(true);
+      expect(service.isUnavailableValue('niedostępne')).toBe(true);
+      expect(service.isUnavailableValue('wyprzedane')).toBe(true);
+      expect(service.isUnavailableValue('out of stock')).toBe(true);
+      expect(service.isUnavailableValue('unavailable')).toBe(true);
+      expect(service.isUnavailableValue('0 szt')).toBe(true);
+      expect(service.isUnavailableValue('0 pcs')).toBe(true);
+      expect(service.isUnavailableValue('')).toBe(true);
+
+      // Available values
+      expect(service.isUnavailableValue('true')).toBe(false);
+      expect(service.isUnavailableValue(true)).toBe(false);
+      expect(service.isUnavailableValue('1')).toBe(false);
+      expect(service.isUnavailableValue(1)).toBe(false);
+      expect(service.isUnavailableValue('tak')).toBe(false);
+      expect(service.isUnavailableValue('yes')).toBe(false);
+      expect(service.isUnavailableValue('dostępny')).toBe(false);
+      expect(service.isUnavailableValue('dostepny')).toBe(false);
+      expect(service.isUnavailableValue('w magazynie')).toBe(false);
+      expect(service.isUnavailableValue('in stock')).toBe(false);
+      expect(service.isUnavailableValue('24h')).toBe(false);
+      expect(service.isUnavailableValue('1-3 dni')).toBe(false);
+      expect(service.isUnavailableValue(undefined)).toBe(false);
+    });
+  });
 });

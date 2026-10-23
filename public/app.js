@@ -582,7 +582,8 @@ document.getElementById('btn-save-profile').addEventListener('click', async () =
       skuPath: 'sku',
       eanPath: 'ean',
       pricePath: 'price',
-      stockPath: 'stock'
+      stockPath: 'stock',
+      availabilityPath: ''
     }
   };
 
@@ -617,6 +618,7 @@ function loadProfileMapping(profileId) {
   document.getElementById('map-ean-path').value = p.mapping.eanPath || '';
   document.getElementById('map-price-path').value = p.mapping.pricePath || '';
   document.getElementById('map-stock-path').value = p.mapping.stockPath || '';
+  document.getElementById('map-availability-path').value = p.mapping.availabilityPath || '';
   document.getElementById('map-name-path').value = p.mapping.namePath || '';
   document.getElementById('map-image-path').value = p.mapping.imagePath || '';
 }
@@ -661,6 +663,7 @@ document.getElementById('btn-inspect-xml').addEventListener('click', async () =>
 window.copyTagToActive = function(prop) {
   const lower = prop.toLowerCase();
   if (lower.includes('price') || lower.includes('cena')) document.getElementById('map-price-path').value = prop;
+  else if (lower.includes('avail') || lower.includes('dostep') || lower === 'status' || lower.endsWith('.status')) document.getElementById('map-availability-path').value = prop;
   else if (lower.includes('stock') || lower.includes('qty') || lower.includes('quantity') || lower.includes('stan') || lower.includes('ilosc')) document.getElementById('map-stock-path').value = prop;
   else if (lower.includes('sku') || lower.includes('code') || lower.includes('kod')) document.getElementById('map-sku-path').value = prop;
   else if (lower.includes('ean') || lower.includes('barcode')) document.getElementById('map-ean-path').value = prop;
@@ -681,6 +684,7 @@ document.getElementById('btn-preview-mapping').addEventListener('click', async (
     eanPath: document.getElementById('map-ean-path').value.trim(),
     pricePath: document.getElementById('map-price-path').value.trim(),
     stockPath: document.getElementById('map-stock-path').value.trim(),
+    availabilityPath: document.getElementById('map-availability-path').value.trim() || undefined,
     namePath: document.getElementById('map-name-path').value.trim() || undefined,
     imagePath: document.getElementById('map-image-path').value.trim() || undefined
   };
@@ -705,7 +709,8 @@ document.getElementById('btn-preview-mapping').addEventListener('click', async (
         <td>${item.sku || '-'}</td>
         <td>${item.ean || '-'}</td>
         <td>${item.price}</td>
-        <td>${item.stock}</td>
+        <td>${item.stock} ${item.isAvailable === false ? '<span class="badge badge-danger" style="font-size: 0.7rem; margin-left: 4px; padding: 2px 5px; border-radius: 4px; background: rgba(239, 68, 68, 0.2); color: #ef4444;">Niedostępny &rarr; 0</span>' : ''}</td>
+        <td>${item.availability !== undefined ? (item.isAvailable === false ? `<span style="color: #ef4444; font-weight: 600;">${item.availability}</span>` : `<span style="color: #10b981; font-weight: 600;">${item.availability}</span>`) : '-'}</td>
         <td>${item.name || '-'}</td>
         <td class="preview-img-cell">${item.imageUrl ? `<a href="${item.imageUrl}" target="_blank" rel="noopener" class="preview-img-link" title="${item.imageUrl}">🖼️ Podgląd URL</a>` : '-'}</td>
       </tr>
@@ -729,6 +734,7 @@ document.getElementById('btn-save-mapping').addEventListener('click', async () =
     eanPath: document.getElementById('map-ean-path').value.trim(),
     pricePath: document.getElementById('map-price-path').value.trim(),
     stockPath: document.getElementById('map-stock-path').value.trim(),
+    availabilityPath: document.getElementById('map-availability-path').value.trim() || undefined,
     namePath: document.getElementById('map-name-path').value.trim() || undefined,
     imagePath: document.getElementById('map-image-path').value.trim() || undefined
   };

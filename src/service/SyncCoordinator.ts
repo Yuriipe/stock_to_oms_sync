@@ -132,11 +132,26 @@ export class SyncCoordinator {
       this.checkAborted(signal);
       await this.yieldEventLoop();
 
-      // Apply fixed stock override if configured for this profile
+      // Apply fixed stock override if configured for this profile, respecting availability
       if (profile.fixedStock !== undefined && profile.fixedStock !== null) {
         const fixedVal = Number(profile.fixedStock);
         for (let i = 0; i < items.length; i++) {
-          items[i].stock = fixedVal;
+          if (items[i].isAvailable === false) {
+            items[i].stock = 0;
+          } else {
+            items[i].stock = fixedVal;
+          }
+          if (i % 2500 === 0) {
+            this.checkAborted(signal);
+            await this.yieldEventLoop();
+          }
+        }
+      } else {
+        // Ensure any item with false / 0 / unavailable status has stock 0
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].isAvailable === false) {
+            items[i].stock = 0;
+          }
           if (i % 2500 === 0) {
             this.checkAborted(signal);
             await this.yieldEventLoop();

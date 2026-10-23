@@ -8,6 +8,8 @@ export interface SupplierParsedItem {
   ean?: string;
   price: number;
   stock: number;
+  availability?: string;
+  isAvailable?: boolean;
   name?: string;
   imageUrl?: string;
 }
@@ -76,6 +78,99 @@ export class XmlParserService {
       return undefined;
     }
     return String(current).trim();
+  }
+
+  /**
+   * Determines if an availability tag value indicates false / out of stock / unavailable.
+   */
+  public isUnavailableValue(val: unknown): boolean {
+    if (val === undefined || val === null) return false;
+    if (typeof val === 'boolean') return !val;
+    if (typeof val === 'number') return val <= 0;
+
+    const s = String(val).trim().toLowerCase();
+    if (s === '') return true;
+
+    const unavailableExact = new Set([
+      '0',
+      '0.0',
+      '0.00',
+      '-1',
+      'false',
+      'f',
+      'nie',
+      'no',
+      'off',
+      'none',
+      'null',
+      'undefined',
+      'brak',
+      'brak towaru',
+      'brak w magazynie',
+      'brak na magazynie',
+      'chwilowy brak',
+      'wyprzedane',
+      'wyprzedany',
+      'wyprzedana',
+      'niedostepny',
+      'niedostępny',
+      'niedostepne',
+      'niedostępne',
+      'niedostepna',
+      'niedostępna',
+      'niedostepnosc',
+      'niedostępność',
+      'nieaktywny',
+      'nieaktywne',
+      'nieaktywna',
+      'out of stock',
+      'out_of_stock',
+      'outofstock',
+      'unavailable',
+      'not available',
+      'not_available',
+      'sold out',
+      'sold_out',
+      'soldout',
+      'discontinued',
+      'zapytaj o dostepnosc',
+      'zapytaj o dostępność',
+      'nicht lieferbar',
+      'nicht verfügbar',
+      'nicht verfugbar',
+      'ausverkauft',
+      'nein'
+    ]);
+
+    if (unavailableExact.has(s)) return true;
+
+    if (
+      s.startsWith('brak') ||
+      s.startsWith('niedostępn') ||
+      s.startsWith('niedostepn') ||
+      s.startsWith('wyprzedan') ||
+      s.startsWith('nieaktywn') ||
+      s.startsWith('out of stock') ||
+      s.startsWith('out_of_stock') ||
+      s.startsWith('sold out') ||
+      s.startsWith('sold_out') ||
+      s.startsWith('unavail') ||
+      s.startsWith('not avail') ||
+      s.startsWith('nicht ') ||
+      s.startsWith('ausverkauft')
+    ) {
+      return true;
+    }
+
+    if (/^[-+]?0+(?:\.0+)?(?:\s*(?:szt|sztuk|\.|pcs|item|items|op|opak))?$/.test(s) || /^-\d+(?:\.\d+)?$/.test(s)) {
+      return true;
+    }
+
+    if (/^(?:stan|ilosc|ilość|qty|quantity|stock)\s*[:=]\s*0+$/i.test(s)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -171,6 +266,27 @@ export class XmlParserService {
         }
       }
 
+      let rawAvailability = mapping.availabilityPath ? this.resolvePath(node, mapping.availabilityPath) : undefined;
+      if (rawAvailability === undefined && !mapping.availabilityPath) {
+        for (const candidate of [
+          'availability',
+          'available',
+          'dostepnosc',
+          'dostepny',
+          'status',
+          'in_stock',
+          'is_available',
+          '@_available',
+          '@_status'
+        ]) {
+          const val = this.resolvePath(node, candidate);
+          if (val !== undefined) {
+            rawAvailability = val;
+            break;
+          }
+        }
+      }
+
       let name = mapping.namePath ? this.resolvePath(node, mapping.namePath) : undefined;
       if (!name) {
         for (const candidate of ['name', 'nazwa', 'title', 'tytul', 'product_name', 'nazwa_produktu']) {
@@ -183,7 +299,17 @@ export class XmlParserService {
       }
 
       const price = rawPrice ? (parseFloat(rawPrice.replace(',', '.')) || 0) : 0;
-      const stock = rawStock ? (parseInt(rawStock.replace(/\s+/g, ''), 10) || 0) : 0;
+      let stock = rawStock ? (parseInt(rawStock.replace(/\s+/g, ''), 10) || 0) : 0;
+      if (isNaN(stock) || stock < 0) stock = 0;
+
+      let isAvailable: boolean | undefined = undefined;
+      if (rawAvailability !== undefined) {
+        const isUnavail = this.isUnavailableValue(rawAvailability);
+        isAvailable = !isUnavail;
+        if (isUnavail) {
+          stock = 0;
+        }
+      }
 
       // Primary identifier according to identifierField, falling back gracefully
       let identifier = mapping.identifierField === 'sku' ? (sku || ean || '') : (ean || sku || '');
@@ -236,6 +362,8 @@ export class XmlParserService {
         ean: ean || undefined,
         price: isNaN(price) ? 0 : price,
         stock: isNaN(stock) ? 0 : stock,
+        availability: rawAvailability,
+        isAvailable,
         name: name || undefined,
         imageUrl: imageUrl || undefined
       });
